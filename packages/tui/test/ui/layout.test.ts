@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test"
 import {
+  clampSessionSidebarWidth,
   clampSessionTabsWidth,
   sessionTabsFitVertically,
   SESSION_SIDEBAR_MAX_WIDTH,
+  SESSION_SIDEBAR_MIN_WIDTH,
   SESSION_SIDEBAR_WIDTH,
   SESSION_TABS_COMPACT_WIDTH,
 } from "../../src/ui/layout"
@@ -28,4 +30,12 @@ test("vertical tab width preserves minimum rail and content widths", () => {
   expect(clampSessionTabsWidth(42, 54)).toBe(10)
   expect(sessionTabsFitVertically(69, SESSION_TABS_COMPACT_WIDTH)).toBe(true)
   expect(sessionTabsFitVertically(68, SESSION_TABS_COMPACT_WIDTH)).toBe(false)
+})
+
+test("session sidebar width preserves readable bounds and content room", () => {
+  expect(clampSessionSidebarWidth(0, 200)).toBe(SESSION_SIDEBAR_MIN_WIDTH)
+  expect(clampSessionSidebarWidth(50, 200)).toBe(50)
+  expect(clampSessionSidebarWidth(200, 200)).toBe(SESSION_SIDEBAR_MAX_WIDTH)
+  expect(clampSessionSidebarWidth(100, 100)).toBe(56)
+  expect(clampSessionSidebarWidth(10, 50)).toBe(SESSION_SIDEBAR_MIN_WIDTH)
 })

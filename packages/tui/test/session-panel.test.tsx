@@ -8,7 +8,9 @@ import {
   TextareaRenderable,
 } from "@opentui/core"
 import type { FileDiffInfo, FormInfo, PermissionRequest, SessionInfo } from "@opencode/client"
+import path from "node:path"
 import type { Config } from "../src/config"
+import { SESSION_SIDEBAR_WIDTH } from "../src/ui/layout"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
@@ -532,6 +534,42 @@ test("disabling the registered diff plugin closes its open panel and removes its
   expect(setup.requests.diff).toHaveLength(1)
 })
 
+test("dragging the docked sidebar boundary resizes it and persists the width", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, { session: { sidebar: "auto" } })
+  await ready(setup)
+  const sidebar = node(setup, "session-sidebar")
+  expect(sidebar.width).toBe(SESSION_SIDEBAR_WIDTH)
+  expect(sidebar.x).toBe(setup.renderer.width - SESSION_SIDEBAR_WIDTH)
+
+  const boundary = setup.renderer.width - SESSION_SIDEBAR_WIDTH - 1
+  const column = () =>
+    setup.captureSpans().lines[10].spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg.toInts()))
+  const resting = column()
+  await setup.mockMouse.moveTo(boundary, 10)
+  await setup.flush()
+  expect(column()[boundary + 1]).not.toEqual(resting[boundary + 1])
+
+  await setup.mockMouse.pressDown(boundary, 10)
+  await setup.mockMouse.moveTo(90, 10)
+  await setup.flush()
+  expect(sidebar.width).toBe(69)
+  expect(sidebar.x).toBe(91)
+
+  await setup.mockMouse.release(90, 10)
+  await setup.flush()
+  const layoutFile = path.join(state.path, "test", "tui", "layout.json")
+  const deadline = Date.now() + 2_000
+  let stored: { sidebarWidth?: number } = {}
+  while (stored.sidebarWidth !== 69 && Date.now() < deadline) {
+    stored = await Bun.file(layoutFile)
+      .json()
+      .catch(() => ({}))
+    if (stored.sidebarWidth !== 69) await Bun.sleep(10)
+  }
+  expect(stored.sidebarWidth).toBe(69)
+})
+
 const files = Array.from({ length: 4 }, (_, index) => ({
   file: `src/file0${index}.txt`,
   status: "modified",
@@ -553,6 +591,7 @@ async function createSessionFixture(
   input: {
     width?: number
     tabs?: Config.Info["tabs"]
+    session?: Config.Info["session"]
     diffs?: Config.Info["diffs"]
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
@@ -608,7 +647,7 @@ async function createSessionFixture(
     config: {
       animations: false,
       tabs: input.tabs ?? { enabled: false },
-      session: { sidebar: "hide" },
+      session: input.session ?? { sidebar: "hide" },
       // Keep patch geometry stable while testing host presentation changes, not split/unified diff layout.
       diffs: { tree: false, view: "unified", ...input.diffs },
       keybinds: { "diff.open": "f6", ...input.keybinds },
