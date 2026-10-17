@@ -116,6 +116,14 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
         )).at(0)
       : undefined
 
+  // V1 parity: OPENCODE_DISABLE_CLAUDE_CODE(_SKILLS) drops the ~/.claude compatibility roots,
+  // so the compatibility skill plugin loads no Claude skills. The variables stopped working in
+  // the V2 rewrite (anomalyco/opencode#36990); gating the discovery layer restores them, and the
+  // discovery layer is the single producer of `claude` roots, so every consumer is covered.
+  const claudeCompatDisabled = Boolean(
+    process.env.OPENCODE_DISABLE_CLAUDE_CODE || process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS,
+  )
+
   return {
     system: globalEnabled && system ? { path: system, present: yield* fs.isDir(system) } : undefined,
     preferences,
@@ -127,7 +135,7 @@ export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options
       (directory) => fs.isDir(directory).pipe(Effect.map((present) => ({ path: directory, present }))),
     ),
     claude:
-      options?.claude === false
+      options?.claude === false || claudeCompatDisabled
         ? []
         : [
             ...new Set([
