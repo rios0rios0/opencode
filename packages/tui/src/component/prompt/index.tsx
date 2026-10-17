@@ -1,6 +1,7 @@
 import {
   BoxRenderable,
   RGBA,
+  TextAttributes,
   TextareaRenderable,
   MouseEvent,
   PasteEvent,
@@ -1616,15 +1617,23 @@ export function Prompt(props: PromptProps) {
     const pending = pendingDirectory()
     const location = pending ? { directory: pending } : footerLocation()
     if (!location) return
-    const directory = abbreviateHome(location.directory, paths.home)
-    const branch = data.location.vcs.info(location)?.branch.current
-    return branch ? `${directory}:${branch}` : directory
+    return {
+      directory: abbreviateHome(location.directory, paths.home),
+      branch: data.location.vcs.info(location)?.branch.current,
+    }
   })
   const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
   const locationLabelDisplay = createMemo(() => {
     const label = locationLabel()
     if (!label) return
-    return truncateFilePath(label, locationWidth())
+    const width = locationWidth()
+    const suffix = label.branch ? ` ⎇ ${label.branch}` : ""
+    // A branch that leaves less than a recognizable directory drops the branch
+    // instead of truncating the path to a stub.
+    if (!label.branch || stringWidth(suffix) + 8 > width) {
+      return { directory: truncateFilePath(label.directory, width) }
+    }
+    return { directory: truncateFilePath(label.directory, width - stringWidth(suffix)), branch: label.branch }
   })
   const locationActions = useWorkingDirectoryActions({
     directory: () => footerLocation()?.directory,
@@ -1874,89 +1883,111 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
+        <box width="100%" flexDirection="column">
           <Slot path="prompt.footer" input={footerInput()}>
-            <Slot path="prompt.footer.status" input={footerInput()}>
-              <box
-                flexGrow={1}
-                flexShrink={1}
-                minWidth={0}
-                onSizeChange={function (this: BoxRenderable) {
-                  const width = this.width
-                  queueMicrotask(() => setLocationWidth(width))
-                }}
-              >
-                <Switch>
-                  <Match when={status() === "running"}>
-                    <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
-                      <box marginLeft={1}>
-                        <Show when={config.animations ?? true} fallback={<text fg={theme.text.muted}>[⋯]</text>}>
-                          <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
-                        </Show>
+            <box width="100%" flexDirection="row" gap={2}>
+              <Slot path="prompt.footer.status" input={footerInput()}>
+                <box
+                  flexGrow={0}
+                  flexShrink={1}
+                  minWidth={0}
+                  onSizeChange={function (this: BoxRenderable) {
+                    const width = this.width
+                    queueMicrotask(() => setLocationWidth(width))
+                  }}
+                >
+                  <Switch>
+                    <Match when={status() === "running"}>
+                      <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
+                        <box marginLeft={1}>
+                          <Show when={config.animations ?? true} fallback={<text fg={theme.text.muted}>[⋯]</text>}>
+                            <spinner color={spinnerDef().color} frames={spinnerDef().frames} interval={40} />
+                          </Show>
+                        </box>
+                        <PromptInterruptStatus
+                          armed={store.interrupt > 0}
+                          animations={animationsEnabled()}
+                          text={theme.text.base}
+                          subdued={theme.text.muted}
+                          warning={theme.text.feedback.warning.base}
+                          flash={theme.decrease(theme.text.feedback.warning.base, 2)}
+                        />
                       </box>
-                      <PromptInterruptStatus
-                        armed={store.interrupt > 0}
-                        animations={animationsEnabled()}
-                        text={theme.text.base}
-                        subdued={theme.text.muted}
-                        warning={theme.text.feedback.warning.base}
-                        flash={theme.decrease(theme.text.feedback.warning.base, 2)}
-                      />
-                    </box>
-                  </Match>
-                  <Match when={move.progress()}>
-                    {(progress) => (
-                      <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                        <Spinner color={theme.hue.accent[500]}>
-                          {progress()}
-                          <span style={{ fg: theme.text.muted }}>{".".repeat(move.creatingDots())}</span>
-                        </Spinner>
-                      </box>
-                    )}
-                  </Match>
-                  <Match when={move.pendingNew()}>
-                    <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
-                      <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
-                        (new worktree)
-                      </text>
-                    </box>
-                  </Match>
-                  <Match when={true}>
-                    <Show when={locationLabelDisplay()} fallback={<text />}>
-                      {(location) => (
-                        <text
-                          id="prompt.footer.location"
-                          fg={locationActions.hovered() ? theme.text.base : theme.text.muted}
-                          wrapMode="none"
-                          truncate
-                          flexGrow={1}
-                          flexShrink={1}
-                          onMouseOver={locationActions.onMouseOver}
-                          onMouseOut={locationActions.onMouseOut}
-                          onMouseUp={locationActions.onMouseUp}
-                        >
-                          {location()}
-                        </text>
+                    </Match>
+                    <Match when={move.progress()}>
+                      {(progress) => (
+                        <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                          <Spinner color={theme.hue.accent[500]}>
+                            {progress()}
+                            <span style={{ fg: theme.text.muted }}>{".".repeat(move.creatingDots())}</span>
+                          </Spinner>
+                        </box>
                       )}
-                    </Show>
-                  </Match>
-                </Switch>
-              </box>
-            </Slot>
-            <Slot path="prompt.footer.file" input={footerInput()}>
-              <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
-                {(file) => (
-                  <text
-                    wrapMode="none"
-                    truncate
-                    flexShrink={1}
-                    fg={editorContextLabelState() === "pending" ? theme.hue.accent[500] : theme.text.muted}
-                  >
-                    {file()}
-                  </text>
-                )}
+                    </Match>
+                    <Match when={move.pendingNew()}>
+                      <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>
+                        <text fg={theme.hue.accent[500]} wrapMode="none" truncate>
+                          (new worktree)
+                        </text>
+                      </box>
+                    </Match>
+                    <Match when={true}>
+                      <Show when={locationLabelDisplay()} fallback={<text />}>
+                        {(location) => (
+                          <text
+                            id="prompt.footer.location"
+                            fg={theme.text.muted}
+                            wrapMode="none"
+                            truncate
+                            flexGrow={1}
+                            flexShrink={1}
+                            onMouseOver={locationActions.onMouseOver}
+                            onMouseOut={locationActions.onMouseOut}
+                            onMouseUp={locationActions.onMouseUp}
+                          >
+                            <span style={{ fg: locationActions.hovered() ? theme.text.base : theme.text.muted }}>
+                              {location().directory}
+                            </span>
+                            <Show when={location().branch}>
+                              {(branch) => (
+                                <span style={{ fg: theme.text.feedback.info.muted }}>
+                                  {" ⎇ "}
+                                  {branch()}
+                                </span>
+                              )}
+                            </Show>
+                          </text>
+                        )}
+                      </Show>
+                    </Match>
+                  </Switch>
+                </box>
+              </Slot>
+              <Slot path="prompt.footer.file" input={footerInput()}>
+                <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
+                  {(file) => (
+                    <text
+                      wrapMode="none"
+                      truncate
+                      flexShrink={1}
+                      fg={editorContextLabelState() === "pending" ? theme.hue.accent[500] : theme.text.muted}
+                    >
+                      {file()}
+                    </text>
+                  )}
+                </Show>
+              </Slot>
+              <Show when={local.permission.mode === "autoaccept"}>
+                <text
+                  fg={theme.text.feedback.warning.base}
+                  attributes={TextAttributes.BOLD}
+                  wrapMode="none"
+                  flexShrink={0}
+                >
+                  ⚠ bypass
+                </text>
               </Show>
-            </Slot>
+            </box>
           </Slot>
         </box>
       </box>
