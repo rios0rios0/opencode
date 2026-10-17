@@ -1,15 +1,40 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { contextUsage, formatContextUsage } from "../../util/session"
+import { TextAttributes, type BoxRenderable, type RGBA } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { TextAttributes } from "@opentui/core"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useInteractivity } from "../../context/interactivity"
+import { Locale } from "../../util/locale"
+import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
+import { contextUsage } from "../../util/session"
 import { stringWidth } from "../../util/string-width"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 })
+
+const SEPARATOR = " · "
+const SEPARATOR_WIDTH = stringWidth(SEPARATOR)
+
+/** Cached plan limits older than an hour are drawn dimmed; the status line cache refreshes itself. */
+const PLAN_USAGE_STALE = 3600
+const PLAN_USAGE_REFRESH = 60_000
+
+type FooterBarSpan = {
+  text: string
+  fg: RGBA
+}
+
+export type FooterBarSegment = {
+  id: string
+  /** Higher priorities survive longer; the fitter skips a segment once it no longer fits. */
+  priority: number
+  /** Core width, excluding the optional tail. */
+  width: number
+  spans: FooterBarSpan[]
+  /** Dropped before the core when the bar runs out of room. */
+  tail?: FooterBarSpan[]
+}
 
 export function PromptFooter(props: {
   context: Plugin.Context
@@ -19,6 +44,13 @@ export function PromptFooter(props: {
 }) {
   const dimensions = useTerminalDimensions()
   const [liveHovered, setLiveHovered] = createSignal(false)
+  const [barWidth, setBarWidth] = createSignal<number>()
+  const [plan, setPlan] = createSignal<PlanUsage>()
+  const [email, setEmail] = createSignal<string>()
+  const sessionLocation = createMemo(() => {
+    if (!props.sessionID) return props.context.location
+    return props.context.data.session.get(props.sessionID)?.location ?? props.context.location
+  })
   const subagents = createMemo(() => {
     if (!props.sessionID) return 0
     const count = props.context.data.session
@@ -33,99 +65,216 @@ export function PromptFooter(props: {
       .filter((shell) => shell.metadata.sessionID === props.sessionID).length
     return count ? `${count} shell${count === 1 ? "" : "s"}` : undefined
   })
-  const status = createMemo(() => {
-    if (!props.sessionID) return []
-    const session = props.context.data.session.get(props.sessionID)
-    if (!session) return []
-    const usage = contextUsage(
-      props.context.data.session.message.list(props.sessionID),
-      props.context.data.location.model.list(session.location),
-      session.revert?.messageID,
-    )
-    const cost = props.context.data.session.cost(props.sessionID)
-    return [
-      usage ? formatContextUsage(usage.tokens, usage.percent) : undefined,
-      cost > 0 ? money.format(cost) : undefined,
-    ].filter((item): item is string => Boolean(item))
-  })
-  const live = createMemo(() => Boolean(subagents() || shells()))
+  const live = createMemo(() => [subagents(), shells()].filter((value): value is string => Boolean(value)))
   // Prompt hints read as disabled while the session does not own input, e.g. while a side panel is focused.
   const interactive = useInteractivity()
   const shortcut = (id: string) => props.context.keymap.shortcuts(id)[0]
-  const layout = createMemo(() => {
-    const command = shortcut("command.palette.show")
-    if (status().length === 0) return { usage: false, shortcuts: dimensions().width >= 44 }
-    return promptFooterLayout({
-      width: Math.max(0, dimensions().width - 8),
-      usage: status(),
-      shortcuts: command ? [`${command} commands`] : [],
+
+  onMount(() => {
+    let cancelled = false
+    const load = async () => {
+      const usage = await readPlanUsage()
+      if (cancelled) return
+      setPlan(usage)
+    }
+    void load()
+    const timer = setInterval(() => void load(), PLAN_USAGE_REFRESH)
+    onCleanup(() => {
+      cancelled = true
+      clearInterval(timer)
     })
+  })
+
+  createEffect(() => {
+    const directory = sessionLocation()?.directory
+    if (!directory) return
+    void gitEmail(directory).then((value) => {
+      if (sessionLocation()?.directory === directory) setEmail(value)
+    })
+  })
+
+  const modelLabel = createMemo(() => {
+    const session = props.sessionID ? props.context.data.session.get(props.sessionID) : undefined
+    const current = props.context.ui.model.current()
+    const ref = current ? { providerID: current.providerID, id: current.modelID } : session?.model
+    if (!ref) return
+    const models = props.context.data.location.model.list(session?.location ?? props.context.location)
+    const model = models?.find(
+      (item) => item.providerID === ref.providerID && (item.modelID === ref.id || item.id === ref.id),
+    )
+    return model?.name ?? ref.id
+  })
+
+  const liveText = createMemo(() => {
+    if (!live().length) return
+    const binding = shortcut("session.child.first")
+    return binding ? `${binding} ${live().join(SEPARATOR)}` : live().join(SEPARATOR)
+  })
+
+  const segments = createMemo<FooterBarSegment[]>(() => {
+    const theme = props.context.theme
+    const list: FooterBarSegment[] = []
+    const identity = localIdentity()
+    if (identity) list.push(segment("identity", 90, [{ text: identity, fg: theme.text.muted }]))
+    const mail = email()
+    if (mail) list.push(segment("email", 88, [{ text: mail, fg: theme.text.faint }]))
+    const model = modelLabel()
+    if (model) list.push(segment("model", 95, [{ text: model, fg: theme.text.base }]))
+    if (props.sessionID) {
+      const session = props.context.data.session.get(props.sessionID)
+      const usage = session
+        ? contextUsage(
+            props.context.data.session.message.list(props.sessionID),
+            props.context.data.location.model.list(session.location),
+            session.revert?.messageID,
+          )
+        : undefined
+      if (usage) {
+        const left = usage.percent === undefined ? undefined : Math.max(0, 100 - usage.percent)
+        const spans: FooterBarSpan[] = [
+          {
+            text: left === undefined ? `ctx ${Locale.number(usage.tokens)}` : `ctx ${left}% left`,
+            fg: usage.percent === undefined ? theme.text.base : severity(theme, usage.percent),
+          },
+        ]
+        if (usage.limit) {
+          spans.push({ text: ` (${Locale.number(usage.tokens)}/${Locale.number(usage.limit)})`, fg: theme.text.faint })
+        }
+        list.push(segment("ctx", 100, spans))
+      }
+    }
+    const limits = plan()
+    if (limits) list.push(...planSegments(limits, theme))
+    if (props.sessionID) {
+      const cost = props.context.data.session.cost(props.sessionID)
+      if (cost > 0) list.push(segment("cost", 50, [{ text: money.format(cost), fg: theme.text.muted }]))
+    }
+    const live = liveText()
+    if (live) list.push(segment("live", 60, [{ text: live, fg: theme.text.muted }]))
+    return list
+  })
+
+  const agentHint = createMemo(() => {
+    if (!props.showDetails || props.mode !== "normal" || dimensions().width < 44) return
+    // The agent hint only owns the footer while no usage or live work is shown,
+    // so a populated status bar never loses a segment to it.
+    const idle = !liveText() && !segments().some((item) => item.id === "ctx" || item.id === "cost")
+    return idle ? shortcut("agent.cycle") : undefined
+  })
+  const commandHint = createMemo(() => {
+    if (!props.showDetails || props.mode !== "normal" || dimensions().width < 44) return
+    return shortcut("command.palette.show")
+  })
+  const hintParts = createMemo(() =>
+    [agentHint() ? `${agentHint()} agents` : undefined, commandHint() ? `${commandHint()} commands` : undefined].filter(
+      (part): part is string => Boolean(part),
+    ),
+  )
+  const hintWidth = createMemo(() =>
+    hintParts().reduce((total, part, index) => total + (index ? 1 : 0) + stringWidth(part), 0),
+  )
+  const visible = createMemo(() => {
+    if (!props.showDetails) {
+      const only = new Map<string, "full" | "core">()
+      if (liveText()) only.set("live", "full")
+      return only
+    }
+    // Prompt hints are part of the ready prompt, so the bar fits into whatever
+    // they leave; the fitter then drops bar segments from the end.
+    const reserved = hintWidth() ? hintWidth() + 2 : 0
+    return footerBarLayout(segments(), Math.max(0, (barWidth() ?? dimensions().width) - reserved))
+  })
+  const textSegments = createMemo(() => segments().filter((item) => item.id !== "live" && visible().has(item.id)))
+  const textSpans = createMemo(() => {
+    const spans: FooterBarSpan[] = []
+    for (const item of textSegments()) {
+      if (spans.length) spans.push({ text: SEPARATOR, fg: props.context.theme.text.faint })
+      spans.push(...item.spans)
+      if (visible().get(item.id) === "full" && item.tail) spans.push(...item.tail)
+    }
+    return spans
   })
 
   return (
     <Switch>
       <Match when={props.mode === "normal"}>
-        <Switch>
-          <Match when={live() || status().length > 0}>
-            <box flexDirection="row" flexShrink={props.showDetails && layout().usage ? 0 : 1} minWidth={0}>
-              <Show when={live()}>
-                <box
-                  flexShrink={0}
-                  onMouseOver={() => setLiveHovered(true)}
-                  onMouseOut={() => setLiveHovered(false)}
-                  onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
-                >
+        <box
+          width="100%"
+          minWidth={0}
+          flexShrink={0}
+          flexDirection="row"
+          justifyContent="space-between"
+          gap={2}
+          onSizeChange={function (this: BoxRenderable) {
+            const width = this.width
+            queueMicrotask(() => setBarWidth(width))
+          }}
+        >
+          <box flexDirection="row" flexShrink={1} minWidth={0}>
+            <Show when={props.showDetails && textSpans().length > 0}>
+              <text wrapMode="none" flexShrink={1} minWidth={0}>
+                <For each={textSpans()}>{(span) => <span style={{ fg: span.fg }}>{span.text}</span>}</For>
+              </text>
+            </Show>
+            <Show when={liveText() && visible().has("live")}>
+              <text
+                id="prompt.footer.live"
+                fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}
+                wrapMode="none"
+                flexShrink={0}
+                onMouseOver={() => setLiveHovered(true)}
+                onMouseOut={() => setLiveHovered(false)}
+                onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
+              >
+                <Show when={textSpans().length > 0}>{SEPARATOR}</Show>
+                <Show when={shortcut("session.child.first")}>
+                  {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
+                </Show>
+                {live().join(SEPARATOR)}
+              </text>
+            </Show>
+          </box>
+          <Show when={hintParts().length > 0}>
+            <box flexDirection="row" flexShrink={0} gap={1}>
+              <Show when={agentHint()}>
+                {(value) => (
                   <text
-                    fg={liveHovered() ? props.context.theme.text.base : props.context.theme.text.muted}
+                    fg={
+                      interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled
+                    }
+                    attributes={interactive() ? 0 : TextAttributes.DIM}
                     wrapMode="none"
                   >
-                    <Show when={shortcut("session.child.first")}>
-                      {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
-                    </Show>
-                    <Show when={subagents()}>{(value) => <>{value()}</>}</Show>
-                    <Show when={subagents() && shells()}> · </Show>
-                    <Show when={shells()}>{(value) => <>{value()}</>}</Show>
+                    {value()} <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>agents</span>
                   </text>
-                </box>
+                )}
               </Show>
-              <Show when={props.showDetails && layout().usage && status().length > 0}>
-                <text fg={props.context.theme.text.muted} wrapMode="none" flexShrink={0}>
-                  <Show when={live()}> · </Show>
-                  {status().join(" · ")}
-                </text>
+              <Show when={commandHint()}>
+                {(value) => (
+                  <text
+                    fg={
+                      interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled
+                    }
+                    attributes={interactive() ? 0 : TextAttributes.DIM}
+                    wrapMode="none"
+                  >
+                    {value()} <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>commands</span>
+                  </text>
+                )}
               </Show>
             </box>
-          </Match>
-          <Match when={props.showDetails && layout().shortcuts}>
-            <text
-              fg={interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled}
-              attributes={interactive() ? 0 : TextAttributes.DIM}
-              flexShrink={0}
-            >
-              {shortcut("agent.cycle")}{" "}
-              <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>agents</span>
-            </text>
-          </Match>
-        </Switch>
-        <Show when={props.showDetails && layout().shortcuts}>
-          <text
-            fg={interactive() ? props.context.theme.text.base : props.context.theme.text.action.primary.disabled}
-            attributes={interactive() ? 0 : TextAttributes.DIM}
-            wrapMode="none"
-            flexShrink={0}
-          >
-            {shortcut("command.palette.show")}{" "}
-            <span style={interactive() ? { fg: props.context.theme.text.muted } : {}}>commands</span>
-          </text>
-        </Show>
+          </Show>
+        </box>
       </Match>
       <Match when={props.mode === "shell"}>
-        <text fg={props.context.theme.text.base} flexShrink={0}>
-          esc{" "}
-          <span style={{ fg: props.context.theme.text.muted }}>
-            {dimensions().width < 44 ? "shell" : "exit shell mode"}
-          </span>
-        </text>
+        <box width="100%" minWidth={0} flexShrink={0} justifyContent="flex-end">
+          <text fg={props.context.theme.text.base} flexShrink={0}>
+            esc{" "}
+            <span style={{ fg: props.context.theme.text.muted }}>
+              {dimensions().width < 44 ? "shell" : "exit shell mode"}
+            </span>
+          </text>
+        </box>
       </Match>
     </Switch>
   )
@@ -143,14 +292,109 @@ export default Plugin.define({
   },
 })
 
-function promptFooterLayout(input: { width: number; usage: string[]; shortcuts: string[] }) {
-  const usage = input.usage.join(" · ")
-  const shortcuts = input.shortcuts.join(" · ")
-  const available = Math.max(0, input.width - Math.min(28, Math.floor(input.width / 2)))
-  if (usage && shortcuts && stringWidth(`${usage} · ${shortcuts}`) <= available) {
-    return { usage: true, shortcuts: true }
+/**
+ * Greedy status bar fit: cores are kept in priority order, and one that no
+ * longer fits is skipped so shorter, lower-priority segments can still render.
+ * Optional tails — reset times, for example — only take space that is left
+ * after every core, so percentages outlive the details they carry. A visible
+ * segment pays one separator except the first.
+ */
+export function footerBarLayout(segments: readonly FooterBarSegment[], width: number) {
+  const ordered = [...segments].sort((a, b) => b.priority - a.priority)
+  const visible = new Map<string, "full" | "core">()
+  let used = 0
+  for (const item of ordered) {
+    const separator = visible.size > 0 ? SEPARATOR_WIDTH : 0
+    if (used + separator + item.width > width) continue
+    used += separator + item.width
+    visible.set(item.id, "core")
   }
-  if (usage && stringWidth(usage) <= available) return { usage: true, shortcuts: false }
-  if (!usage && shortcuts && stringWidth(shortcuts) <= available) return { usage: false, shortcuts: true }
-  return { usage: false, shortcuts: false }
+  for (const item of ordered) {
+    if (!item.tail || visible.get(item.id) !== "core") continue
+    const tail = item.tail.reduce((total, span) => total + stringWidth(span.text), 0)
+    if (used + tail > width) continue
+    used += tail
+    visible.set(item.id, "full")
+  }
+  return visible
+}
+
+function segment(id: string, priority: number, spans: FooterBarSpan[], tail: FooterBarSpan[] = []): FooterBarSegment {
+  return {
+    id,
+    priority,
+    width: spans.reduce((total, span) => total + stringWidth(span.text), 0),
+    spans,
+    tail: tail.length ? tail : undefined,
+  }
+}
+
+/** Green below 70%, amber to 89%, red from 90%, matching the Claude Code status line. */
+function severity(theme: Plugin.Context["theme"], percent: number) {
+  if (percent >= 90) return theme.text.feedback.error.base
+  if (percent >= 70) return theme.text.feedback.warning.base
+  return theme.text.feedback.success.base
+}
+
+function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
+  const list: FooterBarSegment[] = []
+  const stale = Math.floor(Date.now() / 1000) - plan.fetched >= PLAN_USAGE_STALE
+  const color = (percent: number) => (stale ? theme.decrease(severity(theme, percent)) : severity(theme, percent))
+  const reset = (at: number | undefined, weekday: boolean): FooterBarSpan[] =>
+    at ? [{ text: ` (${resetLabel(at, weekday)})`, fg: theme.text.faint }] : []
+  if (plan.five) {
+    list.push(
+      segment(
+        "five",
+        85,
+        [{ text: `5h ${plan.five.percent}%`, fg: color(plan.five.percent) }],
+        reset(plan.five.resetsAt, false),
+      ),
+    )
+  }
+  if (plan.seven) {
+    list.push(
+      segment(
+        "seven",
+        84,
+        [{ text: `7d ${plan.seven.percent}%`, fg: color(plan.seven.percent) }],
+        reset(plan.seven.resetsAt, true),
+      ),
+    )
+  }
+  plan.scoped.forEach((limit, index) => {
+    list.push(segment(`scoped:${index}`, 70, [{ text: `${limit.name} ${limit.percent}%`, fg: color(limit.percent) }]))
+  })
+  return list
+}
+
+function resetLabel(at: number, weekday: boolean) {
+  const time = Locale.time(at * 1000)
+  if (!weekday) return time
+  return `${new Date(at * 1000).toLocaleDateString(undefined, { weekday: "short" })} ${time}`
+}
+
+const emailCache = new Map<string, Promise<string | undefined>>()
+
+function gitEmail(directory: string) {
+  const cached = emailCache.get(directory)
+  if (cached) return cached
+  const pending = readGitEmail(directory)
+  emailCache.set(directory, pending)
+  return pending
+}
+
+async function readGitEmail(directory: string) {
+  try {
+    const proc = Bun.spawn(["git", "config", "--get", "user.email"], {
+      cwd: directory,
+      stdout: "pipe",
+      stderr: "ignore",
+    })
+    const [output, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])
+    const value = output.trim()
+    return code === 0 && value ? value : undefined
+  } catch {
+    return undefined
+  }
 }
