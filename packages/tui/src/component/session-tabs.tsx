@@ -50,12 +50,12 @@ import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { Keymap } from "../context/keymap"
 import "./spinner-renderable"
-import { SPINNER_FRAMES } from "./spinner-frames"
+import { SPINNER_FRAMES, SPINNER_INTERVAL_MS } from "./spinner-frames"
 import { SessionTabsRailControls, SessionTabHalfRow } from "./session-tabs-rail"
 import "./title-shimmer"
 
 export const TAB_SPINNERS = {
-  dots: { frames: SPINNER_FRAMES, interval: 80 },
+  dots: { frames: SPINNER_FRAMES, interval: SPINNER_INTERVAL_MS },
   arcs: { frames: ["◜", "◝", "◞", "◟"], interval: 120 },
   quadrants: { frames: ["◴", "◷", "◶", "◵"], interval: 120 },
   line: { frames: ["|", "/", "-", "\\"], interval: 120 },

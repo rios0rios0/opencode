@@ -13,6 +13,7 @@ import { createEventStream, createFetch, directory, json } from "./fixture/tui-c
 import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
 import { waitForHighlightedFrame } from "./fixture/frame"
+import { SPINNER_FRAMES } from "../src/component/spinner-frames"
 import type { PluginInfo } from "@opencode/client"
 
 test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deletions at width %s", async (width) => {
@@ -373,6 +374,104 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     expect(promptRequests).toBe(0)
   } finally {
     process.stdout.write = originalWrite
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test("session activity animates the terminal title and idle restores it", async () => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width: 80, height: 24 })
+  await setup.renderer.setupTerminal()
+  const titles: string[] = []
+  const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
+  setup.renderer.setTerminalTitle = (title) => {
+    titles.push(title)
+    setTitle(title)
+  }
+  const waitForTitle = async (predicate: (title: string) => boolean) => {
+    const deadline = Date.now() + 2_000
+    while (Date.now() < deadline) {
+      const title = titles.at(-1)
+      if (title !== undefined && predicate(title)) return title
+      await Bun.sleep(10)
+    }
+    throw new Error(`title was not reached; last titles: ${JSON.stringify(titles.slice(-5))}`)
+  }
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    const session = {
+      id: "dummy",
+      title: "Demo session",
+      projectID: "project",
+      location: { directory },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      time: { created: 0, updated: 0 },
+    }
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+  }, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
+        packages: { prepare: async () => ({ directory: "" }) },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: "dummy" },
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await waitForTitle((title) => title === "OC | Demo session")
+    events.emit({
+      id: "evt_started",
+      created: 1,
+      type: "session.execution.started",
+      durable: { aggregateID: "dummy", seq: 1, version: 1 },
+      data: { sessionID: "dummy" },
+    })
+    await waitForTitle((title) => SPINNER_FRAMES.some((frame) => title === `${frame} OC | Demo session`))
+
+    events.emit({
+      id: "evt_permission",
+      created: 2,
+      type: "permission.asked",
+      data: { id: "per_1", sessionID: "dummy", action: "bash", resources: ["bun test"] },
+    })
+    await waitForTitle((title) => title === "! OC | Demo session")
+
+    events.emit({
+      id: "evt_replied",
+      created: 3,
+      type: "permission.replied",
+      data: { sessionID: "dummy", requestID: "per_1", reply: "once" },
+    })
+    await waitForTitle((title) => SPINNER_FRAMES.some((frame) => title === `${frame} OC | Demo session`))
+
+    events.emit({
+      id: "evt_succeeded",
+      created: 4,
+      type: "session.execution.succeeded",
+      durable: { aggregateID: "dummy", seq: 2, version: 1 },
+      data: { sessionID: "dummy" },
+    })
+    await waitForTitle((title) => title === "OC | Demo session")
+    // The spinner stops with the run: no further frame updates arrive while idle.
+    await Bun.sleep(240)
+    expect(titles.at(-1)).toBe("OC | Demo session")
+
+    setup.renderer.destroy()
+    await task
+  } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
     await server.stop()
   }
