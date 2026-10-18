@@ -47,6 +47,13 @@ test("validates the session tabs setting", () => {
   expect(() => decode({ session: { new_location: "current" } })).toThrow()
 })
 
+test("validates external session roots", () => {
+  expect(decodeInfo({ session: { external_roots: ["/tmp/opencode/other-profile"] } })).toEqual({
+    session: { external_roots: ["/tmp/opencode/other-profile"] },
+  })
+  expect(() => decodeInfo({ session: { external_roots: "/tmp/opencode/other-profile" } })).toThrow()
+})
+
 test("resolves nested config and keybind defaults", () => {
   const config = resolve(
     {

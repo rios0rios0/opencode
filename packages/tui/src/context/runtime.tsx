@@ -16,6 +16,7 @@ export type TuiApp = Readonly<{
 export type TuiPaths = Readonly<{
   cwd: string
   home: string
+  data: string
   state: string
   worktree: string
 }>
