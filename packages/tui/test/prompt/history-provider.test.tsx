@@ -62,7 +62,7 @@ async function renderHistory(root: string, persisted?: string) {
   }
 
   const app = await testRender(() => (
-    <TuiPathsProvider value={{ cwd: root, home: root, state, worktree: root }}>
+    <TuiPathsProvider value={{ cwd: root, home: root, data: path.join(root, "data"), state, worktree: root }}>
       <PromptHistoryProvider>
         <Consumer />
       </PromptHistoryProvider>

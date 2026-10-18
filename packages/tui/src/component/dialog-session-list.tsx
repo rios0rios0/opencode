@@ -1,4 +1,4 @@
-import { createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
 import { Project } from "@opencode/schema/project"
@@ -15,6 +15,8 @@ import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { DialogExternalSession } from "./dialog-session-external"
+import { browseExternalSessions, sameDirectory, type ExternalSession } from "../session-source"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
@@ -23,6 +25,7 @@ import { useConfig, useNewDesigns } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
+import { useTuiPaths } from "../context/runtime"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -36,6 +39,7 @@ export function DialogSessionList() {
   const newDesigns = useNewDesigns()
   const toast = useToast()
   const activeLocation = useLocation()
+  const paths = useTuiPaths()
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -121,6 +125,38 @@ export function DialogSessionList() {
     return { message: query ? "No sessions found" : "No sessions available", error: false }
   })
 
+  // Other local OpenCode installations are read-only history: they are discovered once per
+  // configuration and never fetched, resumed, or deleted through the active store.
+  const [externalSessions] = createResource(
+    () => ({ configured: config.session.external_roots ?? [], home: paths.home, exclude: [paths.data] }),
+    (input) => browseExternalSessions(input),
+  )
+  const externalByKey = createMemo(
+    () => new Map((externalSessions()?.sessions ?? []).map((session) => [session.key, session])),
+  )
+  const externalOptions = createMemo(() => {
+    const query = filter().trim().toLowerCase()
+    const current = allProjects() ? undefined : data.location.info(pickerLocation())
+    return (externalSessions()?.sessions ?? [])
+      .filter((session) => !current || sameDirectory(session.directory, current.directory))
+      .filter(
+        (session) =>
+          !query ||
+          withTimestampedFallback(session).toLowerCase().includes(query) ||
+          session.directory.toLowerCase().includes(query) ||
+          session.sourceLabel.toLowerCase().includes(query),
+      )
+  })
+  createEffect(() => {
+    const warnings = externalSessions()?.warnings
+    if (!warnings?.length) return
+    toast.show({
+      message: warnings.length === 1 ? warnings[0] : `${warnings[0]} (+${warnings.length - 1} more)`,
+      variant: "warning",
+      duration: 8000,
+    })
+  })
+
   const quickSwitchHint = createMemo(() => {
     if (sessionTabs.enabled()) return
     const first = shortcuts.get("session.quick_switch.1")
@@ -189,7 +225,14 @@ export function DialogSessionList() {
         return option(session, date === today ? "Today" : date)
       })
 
-    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining]
+    const external = externalOptions().map((session) => ({
+      title: withTimestampedFallback(session),
+      value: session.key,
+      category: `External · ${session.sourceLabel}`,
+      footer: Locale.truncateMiddle(session.directory, 30),
+    }))
+
+    return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining, ...external]
   })
 
   onMount(() => dialog.setSize("large"))
@@ -246,6 +289,11 @@ export function DialogSessionList() {
       }
       onMove={() => setToDelete(undefined)}
       onSelect={(option) => {
+        const session = externalByKey().get(option.value)
+        if (session) {
+          DialogExternalSession.show(dialog, session)
+          return
+        }
         route.navigate({ type: "session", sessionID: option.value })
         dialog.clear()
       }}
@@ -254,11 +302,13 @@ export function DialogSessionList() {
           command: "session.pin.toggle",
           title: "pin/unpin",
           hidden: sessionTabs.enabled(),
+          disabled: readOnlyOption(externalByKey),
           onTrigger: (option) => local.session.togglePin(option.value),
         },
         {
           command: "session.delete",
           title: "delete",
+          disabled: readOnlyOption(externalByKey),
           onTrigger: (option: { value: string }) => {
             if (toDelete() !== option.value) {
               setToDelete(option.value)
@@ -286,6 +336,7 @@ export function DialogSessionList() {
         {
           command: "session.rename",
           title: "rename",
+          disabled: readOnlyOption(externalByKey),
           onTrigger: (option: { value: string; title: string }) =>
             DialogSessionRename.show(dialog, option.value, option.title),
         },
@@ -302,6 +353,11 @@ function quickSwitchRange(first: string, last: string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
   return `${first} through ${last}`
+}
+
+/** External sessions are read-only history: destructive actions never target their keys. */
+function readOnlyOption(sessions: () => Map<string, ExternalSession>) {
+  return (option: { value: string } | undefined) => Boolean(option && sessions().has(option.value))
 }
 
 export function sessionStatusGutter(

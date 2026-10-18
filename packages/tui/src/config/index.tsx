@@ -180,6 +180,9 @@ export const Info = Schema.Struct({
       permissions: Schema.optional(Schema.Literals(["prompt", "autoaccept"])).annotate({
         description: "Prompt for permission requests or accept them automatically",
       }),
+      external_roots: Schema.optional(Schema.Array(Schema.String)).annotate({
+        description: "Additional OpenCode data directories to browse read-only for sessions from other local installations",
+      }),
     }),
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
