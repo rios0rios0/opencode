@@ -2,6 +2,7 @@ import { existsSync } from "fs"
 import path from "path"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
+import { SPINNER_INTERVAL_MS } from "./component/spinner-frames"
 import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
@@ -11,6 +12,7 @@ import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import { Selection } from "./util/selection"
+import { terminalTitle } from "./util/terminal-title"
 import {
   CliRenderEvents,
   createCliRenderer,
@@ -600,6 +602,20 @@ function App() {
   })
 
   let active: { id: string; title?: string } | undefined
+  const terminalTitleAnimations = () => config.data.animations ?? true
+  const [titleFrame, setTitleFrame] = createSignal(0)
+  // The selected session's tab status is the source of truth, so the ticker runs only while it
+  // actually works; attention and idle states are static and never leave a stale spinner behind.
+  createEffect(() => {
+    const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+    const status = sessionID ? sessionTabs.status(sessionID) : undefined
+    if (!status?.busy || status.attention || !terminalTitleAnimations()) {
+      setTitleFrame(0)
+      return
+    }
+    const timer = setInterval(() => setTitleFrame((frame) => frame + 1), SPINNER_INTERVAL_MS)
+    onCleanup(() => clearInterval(timer))
+  })
   // Update terminal window title based on current route and session
   createEffect(() => {
     const session = route.data.type === "session" ? data.session.get(route.data.sessionID) : undefined
@@ -618,7 +634,15 @@ function App() {
         return
       }
 
-      renderer.setTerminalTitle(`OC | ${title.length > 40 ? title.slice(0, 37) + "…" : title}`)
+      const status = sessionTabs.status(route.data.sessionID)
+      renderer.setTerminalTitle(
+        terminalTitle(title, {
+          attention: status.attention,
+          busy: status.busy,
+          animations: terminalTitleAnimations(),
+          frame: titleFrame(),
+        }),
+      )
       return
     }
 
