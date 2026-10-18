@@ -2,6 +2,12 @@
 
 Release notes for OpenCode V2, newest first.
 
+## [Unreleased]
+
+### Documentation
+
+- Added an OCode feature-request index with separate briefs for each request, including the two-part OmniRoute quota API/footer work and a Powerlevel10k-inspired footer/status bar.
+
 ## v2.1.3 — 2026-10-22
 
 ### Highlights
