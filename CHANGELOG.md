@@ -7,6 +7,7 @@ Release notes for OpenCode V2, newest first.
 ### Documentation
 
 - Added an OCode feature-request index with separate briefs for each request, including the two-part OmniRoute quota API/footer work and a Powerlevel10k-inspired footer/status bar.
+- Added feature-request briefs for the OmniRoute-routed-model display, built on OmniRoute's documented `X-OmniRoute-*` response headers, and for the blank gaps that invisible-only (`U+200B`) text parts create between low-verbosity activity summaries in the official build.
 
 ## v2.1.3 — 2026-10-22
 
