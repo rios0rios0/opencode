@@ -177,3 +177,45 @@ test("a low activity summary that ends the transcript opens like v2 at the botto
     [...messages, ...running],
   )
 }, 20000)
+
+test("invisible-only parts never split a low activity summary into blank rows", async () => {
+  const history: SessionMessageInfo[] = [
+    { type: "user", id: "user-gap", text: "Gap prompt", time: { created: 1 } },
+    {
+      type: "assistant",
+      id: "assistant-gap",
+      agent: "build",
+      model,
+      finish: "stop",
+      time: { created: 2, completed: 3 },
+      content: [
+        { type: "text", text: "Gap answer" },
+        { type: "reasoning", text: "thinking through it" },
+        {
+          type: "tool",
+          id: "shell-gap",
+          name: "shell",
+          time: { created: 2, completed: 3 },
+          state: {
+            status: "completed",
+            input: { command: "echo gap" },
+            content: [{ type: "text", text: "gap output" }],
+            metadata: {},
+          },
+        },
+        // The model's invisible-only part: must not become a row or split the activity.
+        { type: "text", text: "\u200b" },
+      ],
+    },
+  ]
+  await withSession(async (setup) => {
+    const frame = setup.captureCharFrame()
+    expect(frame.split("1 command, 1 thought").length - 1).toBe(1)
+    // The collapsed group sits directly below the visible answer with only the normal row margin.
+    const summaryRow = rowOf(frame, "1 command, 1 thought")
+    const answerRow = rowOf(frame, "Gap answer")
+    expect(summaryRow).toBeGreaterThan(answerRow)
+    expect(summaryRow - answerRow).toBeLessThanOrEqual(3)
+    expect(frame).toContain("Gap prompt")
+  }, history)
+})

@@ -3668,3 +3668,100 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
     app.renderer.destroy()
   }
 })
+
+test("invisible-only live deltas never create part rows", async () => {
+  const events = createEventStream()
+  const sessionID = "session-invisible"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+  let data!: ReturnType<typeof useData>
+  let synced = false
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    rows = createSessionRows(
+      () => sessionID,
+      () => (synced = true),
+    )
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    await wait(() => synced)
+    emitEvent(events, {
+      id: "evt_invisible_step_started",
+      created: 1,
+      type: "session.step.started",
+      durable: durable(sessionID),
+      data: {
+        started: 1,
+        sessionID,
+        assistantMessageID: "message-assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    await wait(() => data.session.message.get(sessionID, "message-assistant") !== undefined)
+    emitEvent(events, {
+      id: "evt_invisible_text_started",
+      created: 2,
+      type: "session.text.started",
+      durable: durable(sessionID, 1),
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0 },
+    })
+    emitEvent(events, {
+      id: "evt_invisible_delta",
+      created: 3,
+      type: "session.text.delta",
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0, delta: "\u200b" },
+    })
+    emitEvent(events, {
+      id: "evt_invisible_end",
+      created: 4,
+      type: "session.text.ended",
+      durable: durable(sessionID, 2),
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 0, text: "\u200b" },
+    })
+    // The data layer keeps the part, but the invisible part never became a transcript row.
+    await wait(() => {
+      const message = data.session.message.get(sessionID, "message-assistant")
+      return message?.type === "assistant" && message.content.length === 1
+    })
+    expect(rows.some((row) => row.type === "part")).toBeFalse()
+
+    emitEvent(events, {
+      id: "evt_visible_text_started",
+      created: 5,
+      type: "session.text.started",
+      durable: durable(sessionID, 3),
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 1 },
+    })
+    emitEvent(events, {
+      id: "evt_visible_delta",
+      created: 6,
+      type: "session.text.delta",
+      data: { sessionID, assistantMessageID: "message-assistant", ordinal: 1, delta: "Visible" },
+    })
+    await wait(() => rows.some((row) => row.type === "part"))
+    expect(rows.filter((row) => row.type === "part")).toHaveLength(1)
+  } finally {
+    app.renderer.destroy()
+  }
+})

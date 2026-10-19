@@ -288,3 +288,35 @@ test("a finished execute with no nested calls counts as one tool", () => {
   const message = assistant("a", [])
   expect(activitySummary([{ message, part: tool("x", "execute") }], 0).label).toBe("1 tool")
 })
+
+test("invisible-only text and reasoning parts never become rows, thoughts, or group breaks", () => {
+  const message = assistant("a", [
+    { type: "text", text: "\u200b" },
+    { type: "reasoning", text: "\ufeff\ufeff" },
+    { type: "reasoning", text: "\u200d" },
+    { type: "reasoning", text: " \n\t\u200b" },
+    tool("s", "shell"),
+    { type: "text", text: "Visible answer" },
+  ])
+  const rows = reduceSessionRows([message], new Set(), false, "low")
+  expect(rows).toHaveLength(2)
+  if (rows[0]?.type !== "group" || rows[1]?.type !== "part") throw new Error("Expected activity and part rows")
+  // Invisible parts consumed their ordinals without becoming rows; only the visible text did.
+  expect(rows[1].ref).toMatchObject({ partID: "text:1" })
+  // One finished shell and no invisible-only thoughts.
+  expect(summarizeActivity(rows[0], () => message, [], true)).toMatchObject({ label: "1 command" })
+})
+
+test("text that mixes invisible characters with visible content still renders fully", () => {
+  for (const text of ["\u200bhello\u200b", "👩🏽‍💻 wrote it", "before \u200b after", "\ufeffkeep"]) {
+    const message = assistant("a", [{ type: "text", text }])
+    const rows = reduceSessionRows([message], new Set(), false, "high")
+    expect(rows.filter((row) => row.type === "part")).toHaveLength(1)
+  }
+})
+
+test("redacted-only reasoning stays an invisible thought", () => {
+  const message = assistant("a", [{ type: "reasoning", text: "[REDACTED]" }])
+  const part = message.content[0] as Extract<SessionMessageAssistant["content"][number], { type: "reasoning" }>
+  expect(activitySummary([{ message, part }], 0).label).toBe("")
+})
