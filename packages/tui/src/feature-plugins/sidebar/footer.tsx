@@ -76,18 +76,22 @@ export function SidebarOnboarding(props: { context: Plugin.Context; sessionID: s
 
 function SidebarFooter(props: { context: Plugin.Context; sessionID: string }) {
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
+  // The active session's location wins over the global one, so the sidebar
+  // describes the session/worktree being viewed rather than the app's cwd.
+  const location = createMemo(() => session()?.location ?? props.context.location)
   const move = usePromptMove({
     projectID: () => session()?.projectID,
     sessionID: () => props.sessionID,
   })
   const actions = useWorkingDirectoryActions({
-    directory: () => props.context.location?.directory,
+    directory: () => location()?.directory,
     onMove: () => void move.open(),
   })
   const directory = createMemo(() => {
-    if (!props.context.location) return undefined
-    const value = props.context.ui.format.path(props.context.location.directory)
-    const branch = props.context.data.location.vcs.info(props.context.location)?.branch.current
+    const current = location()
+    if (!current) return undefined
+    const value = props.context.ui.format.path(current.directory)
+    const branch = props.context.data.location.vcs.info(current)?.branch.current
     return branch ? `${value}:${branch}` : value
   })
   return (
