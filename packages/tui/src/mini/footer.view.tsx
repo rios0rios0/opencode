@@ -32,6 +32,8 @@ import { RunPermissionBody } from "./footer.permission"
 import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
 import { footerStatuslinePolicy } from "./footer.width"
+import { locationLabelLayout } from "../util/footer-location"
+import { gitBranchColor, readGitWorkingTree, type GitWorkingTree } from "../util/git-status"
 import { Keymap } from "../context/keymap"
 import type { ClipboardService } from "../context/clipboard"
 import { modelInfo } from "./variant.shared"
@@ -509,7 +511,38 @@ export function RunFooterView(props: RunFooterViewProps) {
     agent: agentColor(),
     status: statusColor(),
   }))
-  const statusRows = createMemo(() => {
+  // The location row mirrors the main footer: directory and branch on their own line above the
+  // status line, driven by the same Git probe and Powerlevel10k layout rules.
+  const [git, setGit] = createSignal<GitWorkingTree>()
+  createEffect(() => {
+    const directory = props.directory()
+    if (!directory) return
+    void readGitWorkingTree(directory).then((value) => {
+      if (props.directory() === directory) setGit(value)
+    })
+  })
+  const locationLayout = createMemo(() =>
+    locationLabelLayout({
+      directory: props.directory(),
+      branch: git()?.branch,
+      ahead: git()?.ahead,
+      behind: git()?.behind,
+      width: statusWidth(),
+    }),
+  )
+  const branchColor = createMemo(() => {
+    switch (gitBranchColor(git())) {
+      case "modified":
+        return theme().warning
+      case "conflicted":
+        return theme().error
+      case "untracked":
+        return theme().text
+      default:
+        return theme().muted
+    }
+  })
+  const statuslineRows = createMemo(() => {
     const text = statusSections()
       .map((group) => group.parts.map((part) => part.text).join(""))
       .join(props.mono ? " - " : " \u00b7 ")
@@ -525,6 +558,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     buffer.destroy()
     return rows
   })
+  const statusRows = createMemo(() => statuslineRows() + (locationLayout() ? 1 : 0))
   createEffect(() => {
     props.onRows(promptRows() + (!panel() && !menu() && !inspecting() ? statusRows() : 0) - 1)
   })
@@ -970,41 +1004,67 @@ export function RunFooterView(props: RunFooterViewProps) {
 
             <Show when={!panel() && !menu()}>
               <box
-                id="mini-statusline"
+                id="mini-status"
                 width="100%"
-                flexDirection="row"
-                gap={1}
+                flexDirection="column"
+                gap={0}
                 flexShrink={0}
                 backgroundColor="transparent"
               >
-                <Show when={busy()}>
-                  <box id="mini-work-spinner" width={1} flexShrink={0}>
-                    <OneCellSpinner
-                      animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
-                      color={agentColor()}
-                      animations={props.tuiConfig.animations}
-                      glow={!props.mono}
-                      still={props.mono ? "*" : undefined}
-                      age={performance.now() - (started() ?? performance.now())}
-                    />
-                  </box>
+                <Show when={locationLayout()}>
+                  {(layout) => (
+                    <box flexDirection="row" gap={1} flexShrink={0}>
+                      <Show when={busy()}>
+                        <box width={1} flexShrink={0} />
+                      </Show>
+                      <text id="mini-location" wrapMode="none" truncate width={statusWidth()} flexShrink={0} fg={theme().muted}>
+                        <span style={{ fg: theme().muted }}>{layout().prefix}</span>
+                        <b style={{ fg: theme().text }}>{layout().anchor}</b>
+                        <Show when={layout().branch}>
+                          {(branch) => (
+                            <>
+                              <span style={{ fg: theme().text }}>{" ⎇ "}</span>
+                              <span style={{ fg: branchColor() }}>{branch()}</span>
+                              <Show when={layout().metadata}>
+                                {(metadata) => <span style={{ fg: theme().muted }}> {metadata()}</span>}
+                              </Show>
+                            </>
+                          )}
+                        </Show>
+                      </text>
+                    </box>
+                  )}
                 </Show>
-                <Show when={statusSections().length > 0}>
-                  <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statusRows()}>
-                    <For each={statusSections()}>
-                      {(section, index) => (
-                        <>
-                          <Show when={index() > 0}>
-                            <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
-                          </Show>
-                          <For each={section.parts}>
-                            {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
-                          </For>
-                        </>
-                      )}
-                    </For>
-                  </text>
-                </Show>
+                <box id="mini-statusline" flexDirection="row" gap={1} flexShrink={0} backgroundColor="transparent">
+                  <Show when={busy()}>
+                    <box id="mini-work-spinner" width={1} flexShrink={0}>
+                      <OneCellSpinner
+                        animation={props.mono ? SEED_MONO : WORK_SPINNERS[props.miniSettings().work_spinner]}
+                        color={agentColor()}
+                        animations={props.tuiConfig.animations}
+                        glow={!props.mono}
+                        still={props.mono ? "*" : undefined}
+                        age={performance.now() - (started() ?? performance.now())}
+                      />
+                    </box>
+                  </Show>
+                  <Show when={statusSections().length > 0}>
+                    <text fg={statusColor()} wrapMode="word" width={statusWidth()} flexShrink={0} height={statuslineRows()}>
+                      <For each={statusSections()}>
+                        {(section, index) => (
+                          <>
+                            <Show when={index() > 0}>
+                              <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
+                            </Show>
+                            <For each={section.parts}>
+                              {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}
+                            </For>
+                          </>
+                        )}
+                      </For>
+                    </text>
+                  </Show>
+                </box>
               </box>
             </Show>
           </box>

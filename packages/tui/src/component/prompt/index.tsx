@@ -30,6 +30,8 @@ import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { expandPromptInputPastedText, realignPromptInputMentions } from "../../prompt/mention"
 import { parseSlashHead } from "../../prompt/parse"
+import { locationLabelLayout } from "../../util/footer-location"
+import { forgetGitWorkingTree, gitBranchColor, readGitWorkingTree, type GitWorkingTree } from "../../util/git-status"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type PromptInfo, type PromptPartRef } from "../../prompt/history"
 import { saveDraft, takeDraft } from "./draft-stash"
@@ -69,7 +71,6 @@ import { DialogImagePreview } from "../dialog-image-preview"
 import { useDirectoryRecents } from "../../prompt/directory-recents"
 import { directoryRecentValue } from "../../prompt/directory-completion"
 import { useWorkingDirectoryActions } from "../../ui/working-directory-actions"
-import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 
 export type PromptProps = {
@@ -101,6 +102,8 @@ export type PromptRef = {
 }
 
 const DRAFT_RETENTION_MIN_CHARS = 20
+/** How often the location row re-reads Git state so a sitting session still tracks edits and commits. */
+const GIT_STATUS_REFRESH = 30_000
 const revealedPromptMetadata = new WeakSet<object>()
 
 function randomIndex(count: number) {
@@ -1625,27 +1628,70 @@ export function Prompt(props: PromptProps) {
     if (status() !== "idle") return
     return data.session.get(props.sessionID)?.location
   })
-  const locationLabel = createMemo(() => {
+  // The working directory drives both the label and the Git probe; a pending move shows the
+  // destination before the session has adopted it.
+  const workingLocation = createMemo(() => {
     const pending = pendingDirectory()
-    const location = pending ? { directory: pending } : footerLocation()
+    if (pending) return { directory: pending }
+    return footerLocation()
+  })
+  const locationLabel = createMemo(() => {
+    const location = workingLocation()
     if (!location) return
     return {
       directory: abbreviateHome(location.directory, paths.home),
       branch: data.location.vcs.info(location)?.branch.current,
     }
   })
+  const [git, setGit] = createSignal<GitWorkingTree>()
+  createEffect(() => {
+    const directory = workingLocation()?.directory
+    if (!directory) {
+      setGit(undefined)
+      return
+    }
+    void readGitWorkingTree(directory).then((value) => {
+      if (workingLocation()?.directory === directory) setGit(value)
+    })
+  })
+  onMount(() => {
+    const timer = setInterval(() => {
+      const directory = workingLocation()?.directory
+      if (!directory) return
+      // Bypass the cache so the branch state and ahead/behind metadata stay current.
+      forgetGitWorkingTree(directory)
+      void readGitWorkingTree(directory).then((value) => {
+        if (workingLocation()?.directory === directory) setGit(value)
+      })
+    }, GIT_STATUS_REFRESH)
+    onCleanup(() => clearInterval(timer))
+  })
   const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
   const locationLabelDisplay = createMemo(() => {
     const label = locationLabel()
     if (!label) return
-    const width = locationWidth()
-    const suffix = label.branch ? ` ⎇ ${label.branch}` : ""
-    // A branch that leaves less than a recognizable directory drops the branch
-    // instead of truncating the path to a stub.
-    if (!label.branch || stringWidth(suffix) + 8 > width) {
-      return { directory: truncateFilePath(label.directory, width) }
+    const tree = git()
+    return locationLabelLayout({
+      directory: label.directory,
+      branch: label.branch,
+      ahead: tree?.ahead,
+      behind: tree?.behind,
+      width: locationWidth(),
+    })
+  })
+  // Powerlevel10k VCS states: conflicts outrank edits, which outrank untracked files; clean and
+  // unknown branches stay quiet.
+  const branchColor = createMemo(() => {
+    switch (gitBranchColor(git())) {
+      case "modified":
+        return theme.text.feedback.warning.base
+      case "untracked":
+        return theme.text.feedback.info.base
+      case "conflicted":
+        return theme.text.feedback.error.base
+      default:
+        return theme.text.muted
     }
-    return { directory: truncateFilePath(label.directory, width - stringWidth(suffix)), branch: label.branch }
   })
   const locationActions = useWorkingDirectoryActions({
     directory: () => footerLocation()?.directory,
@@ -1958,14 +2004,20 @@ export function Prompt(props: PromptProps) {
                             onMouseUp={locationActions.onMouseUp}
                           >
                             <span style={{ fg: locationActions.hovered() ? theme.text.base : theme.text.muted }}>
-                              {location().directory}
+                              {location().prefix}
                             </span>
+                            <b style={{ fg: locationActions.hovered() ? theme.text.base : theme.hue.accent[500] }}>
+                              {location().anchor}
+                            </b>
                             <Show when={location().branch}>
                               {(branch) => (
-                                <span style={{ fg: theme.text.feedback.info.muted }}>
-                                  {" ⎇ "}
-                                  {branch()}
-                                </span>
+                                <>
+                                  <span style={{ fg: theme.text.base }}>{" ⎇ "}</span>
+                                  <span style={{ fg: branchColor() }}>{branch()}</span>
+                                  <Show when={location().metadata}>
+                                    {(metadata) => <span style={{ fg: theme.text.faint }}> {metadata()}</span>}
+                                  </Show>
+                                </>
                               )}
                             </Show>
                           </text>

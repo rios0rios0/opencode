@@ -131,7 +131,8 @@ test.each([false, true])(
           ).join(mono ? " - " : " \u00b7 "),
         )
         expect(statusline.height).toBe(1)
-        expect(app.renderer.footerHeight).toBe(height === 30 ? 4 : 2)
+        // The location row reserves one additional footer row above the status line.
+        expect(app.renderer.footerHeight).toBe(height === 30 ? 5 : 3)
         const identity = app.captureSpans().lines[statusline.y].spans.find((span) => span.text.includes("[max]"))!
         expect(identity.text).toContain(model)
         expect(identity.fg.toInts()).toEqual((theme.footer.text as RGBA).toInts())
