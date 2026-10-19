@@ -4,7 +4,7 @@ import { createResource, For, Show } from "solid-js"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { Keymap } from "../context/keymap"
 import { useTheme } from "../context/theme"
-import { readExternalSession, type ExternalSession, type ExternalTranscriptEntry } from "../session-source"
+import { readExternalSession, HARNESS_LABELS, type ExternalSession, type ExternalTranscriptEntry } from "../session-source"
 import { Locale } from "../util/locale"
 import { DialogFooter, DialogHeader, DialogLayout, useDialog, type DialogContext } from "../ui/dialog"
 
@@ -15,7 +15,7 @@ const KIND_LABELS: Record<ExternalTranscriptEntry["kind"], string> = {
   system: "system",
 }
 
-/** Read-only browser for a session stored by another local OpenCode installation. */
+/** Read-only browser for a session stored by another local harness or OpenCode installation. */
 export function DialogExternalSession(props: { session: ExternalSession }) {
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
@@ -77,7 +77,7 @@ export function DialogExternalSession(props: { session: ExternalSession }) {
     >
       <box gap={1}>
         <text fg={theme.text.muted} wrapMode="word">
-          {`${props.session.directory} · updated ${Locale.datetime(props.session.time.updated)}`}
+          {`${HARNESS_LABELS[props.session.harness]} · ${props.session.directory || "Unknown directory"} · updated ${Locale.datetime(props.session.time.updated)}`}
         </text>
         <Show when={transcript.loading}>
           <text fg={theme.text.muted}>Loading transcript…</text>
