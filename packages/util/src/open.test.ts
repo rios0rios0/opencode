@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test"
-import { openUrl } from "./open.js"
+import { browserUrl, openUrl } from "./open.js"
+
+describe("browserUrl", () => {
+  test("normalizes http and https destinations", () => {
+    expect(browserUrl("https://example.com")).toBe("https://example.com/")
+    expect(browserUrl("http://example.com/docs?page=2#intro")).toBe("http://example.com/docs?page=2#intro")
+  })
+
+  test("returns undefined for anything a browser cannot open", () => {
+    expect(browserUrl("not a url")).toBeUndefined()
+    expect(browserUrl("")).toBeUndefined()
+    expect(browserUrl("file:///etc/hosts")).toBeUndefined()
+    expect(browserUrl("mailto:team@opencode.ai")).toBeUndefined()
+    expect(browserUrl("javascript:alert(1)")).toBeUndefined()
+  })
+})
 
 describe("openUrl", () => {
   test("rejects values that are not URLs", async () => {
