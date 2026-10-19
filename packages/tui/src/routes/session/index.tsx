@@ -643,6 +643,22 @@ export function Session(props: {
     })
     return result ?? false
   }
+  // Undelivered prompts come from the inbox, not from history, so the newest pending one is what an empty
+  // composer gets back. A cancel that loses the delivery race toasts and restores nothing, which keeps the
+  // prompt with the model instead of duplicating it in the editor.
+  const recallPendingPrompt = () => {
+    const target = prompt()
+    const pending = pendingUsers().at(-1)
+    if (!target || !pending) return false
+    void mutatePending("cancel", pending.id, "recall").then((cancelled) => {
+      if (!cancelled) return
+      target.setMode("normal")
+      target.set(appendPrompt(target.current, { ...projectedPromptInput(pending.payload), pasted: [] }))
+      target.focus()
+    })
+    return true
+  }
+
   const openQueuedPrompts = () =>
     dialog.replace(() => (
       <DialogSelect
@@ -1516,6 +1532,7 @@ export function Session(props: {
                     visible={true}
                     ref={bind}
                     muted={props.promptMuted}
+                    onRecallPending={recallPendingPrompt}
                     onSubmit={() => {
                       toBottom()
                     }}

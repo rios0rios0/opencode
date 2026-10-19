@@ -79,6 +79,8 @@ export type PromptProps = {
   muted?: boolean
   onSubmit?: () => void
   onEmptySubmit?: () => boolean | Promise<boolean>
+  /** Tried before history when Up is pressed in an empty composer; returns whether an undelivered prompt was found. */
+  onRecallPending?: () => boolean
   ref?: (ref: PromptRef | undefined) => void
   placeholders?: {
     normal?: string[]
@@ -1038,6 +1040,10 @@ export function Prompt(props: PromptProps) {
               input.moveCursorUp()
               return
             }
+
+            // An empty composer asks the session to pull back whatever it has not delivered yet; only when
+            // nothing is pending does Up walk the prompt history as before.
+            if (input.plainText === "" && props.onRecallPending?.()) return
 
             const item = history.move(-1, input.plainText)
             if (!item) return false
