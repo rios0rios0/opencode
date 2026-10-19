@@ -16,7 +16,7 @@ import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { DialogExternalSession } from "./dialog-session-external"
-import { browseExternalSessions, sameDirectory, type ExternalSession } from "../session-source"
+import { browseExternalSessions, HARNESS_LABELS, HARNESS_ORDER, sameDirectory, type ExternalSession } from "../session-source"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
@@ -125,8 +125,8 @@ export function DialogSessionList() {
     return { message: query ? "No sessions found" : "No sessions available", error: false }
   })
 
-  // Other local OpenCode installations are read-only history: they are discovered once per
-  // configuration and never fetched, resumed, or deleted through the active store.
+  // Sessions from other harnesses and installations are read-only history: they are discovered
+  // once per configuration and never fetched, resumed, or deleted through the active store.
   const [externalSessions] = createResource(
     () => ({ configured: config.session.external_roots ?? [], home: paths.home, exclude: [paths.data] }),
     (input) => browseExternalSessions(input),
@@ -138,14 +138,18 @@ export function DialogSessionList() {
     const query = filter().trim().toLowerCase()
     const current = allProjects() ? undefined : data.location.info(pickerLocation())
     return (externalSessions()?.sessions ?? [])
-      .filter((session) => !current || sameDirectory(session.directory, current.directory))
+      // A session with no readable directory is listed under its explicit Other section
+      // instead of silently disappearing; known directories must match the active one.
+      .filter((session) => !session.directory || !current || sameDirectory(session.directory, current.directory))
       .filter(
         (session) =>
           !query ||
           withTimestampedFallback(session).toLowerCase().includes(query) ||
           session.directory.toLowerCase().includes(query) ||
-          session.sourceLabel.toLowerCase().includes(query),
+          session.sourceLabel.toLowerCase().includes(query) ||
+          HARNESS_LABELS[session.harness].toLowerCase().includes(query),
       )
+      .sort((left, right) => externalRank(left) - externalRank(right) || right.time.updated - left.time.updated)
   })
   createEffect(() => {
     const warnings = externalSessions()?.warnings
@@ -228,8 +232,10 @@ export function DialogSessionList() {
     const external = externalOptions().map((session) => ({
       title: withTimestampedFallback(session),
       value: session.key,
-      category: `External · ${session.sourceLabel}`,
-      footer: Locale.truncateMiddle(session.directory, 30),
+      category: externalCategory(session),
+      footer: session.directory
+        ? `${Locale.truncateMiddle(session.directory, 24)} · ${Locale.time(session.time.updated)}`
+        : `unknown directory · ${Locale.time(session.time.updated)}`,
     }))
 
     return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining, ...external]
@@ -353,6 +359,20 @@ function quickSwitchRange(first: string, last: string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
   return `${first} through ${last}`
+}
+
+/** Groups external sessions by harness; unknown directories fall under an explicit Other section. */
+function externalCategory(session: ExternalSession) {
+  if (!session.directory) return "Other"
+  // OpenCode has multiple discoverable installations, so each section names its own store.
+  const label = HARNESS_LABELS[session.harness]
+  return session.harness === "opencode" ? `${label} · ${Locale.truncateMiddle(session.sourceLabel, 40)}` : label
+}
+
+/** Unknown-directory sessions sort after every harness while harness order stays fixed. */
+function externalRank(session: ExternalSession) {
+  if (!session.directory) return HARNESS_ORDER.length
+  return HARNESS_ORDER.indexOf(session.harness)
 }
 
 /** External sessions are read-only history: destructive actions never target their keys. */

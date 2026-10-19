@@ -4,7 +4,6 @@ import { createHash } from "node:crypto"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { browseOpenCodeSessions, readOpenCodeSession, resolveOpenCodeRoots } from "../../src/session-source/opencode"
-import { sameDirectory } from "../../src/session-source"
 import { tmpdir } from "../fixture/fixture"
 
 function createDatabase(file: string, setup?: (database: Database) => void) {
@@ -288,13 +287,6 @@ test("reports malformed transcript records and unsupported message tables", asyn
   const unreadable = await readOpenCodeSession({ ...session, storePath: path.join(root, "nope.db") })
   expect(unreadable.entries).toEqual([])
   expect(unreadable.warnings[0]).toStartWith("Could not read the session history: ")
-})
-
-test("matches directories exactly, never by shared prefix", () => {
-  expect(sameDirectory("/projects/demo", "/projects/demo")).toBe(true)
-  expect(sameDirectory("/projects/demo/", "/projects/demo")).toBe(true)
-  expect(sameDirectory("/projects/demo", "/projects/demo-other")).toBe(false)
-  expect(sameDirectory("C:\\projects\\demo", "C:/projects/demo")).toBe(true)
 })
 
 test("scans only the configured root, never nested or unrelated directories", async () => {

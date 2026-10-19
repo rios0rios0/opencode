@@ -23,6 +23,7 @@ import { DialogProvider, useDialog } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { emptyThemeSource, tmpdir } from "../../fixture/fixture"
+import { withoutDiscoveryOverrides } from "../../fixture/discovery-env"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
@@ -150,54 +151,56 @@ test("lists external sessions and opens their history read-only", async () => {
     { id: "ses_staging", title: "Staging work", directory: process.cwd() },
     { id: "ses_elsewhere", title: "Remote work", directory: "/projects/elsewhere" },
   ])
-  const { app } = await setupDialog(root, temporary)
+  await withoutDiscoveryOverrides(async () => {
+    const { app } = await setupDialog(root, temporary)
 
-  try {
-    await app.waitForFrame((frame) => frame.includes("Staging work"))
-    const frame = app.captureCharFrame()
-    expect(frame).toContain("Native session")
-    expect(frame).toContain("External · ~/profile")
-    // The current-directory scope hides sessions from other directories until ctrl+a.
-    expect(frame).not.toContain("Remote work")
+    try {
+      await app.waitForFrame((frame) => frame.includes("Staging work"))
+      const frame = app.captureCharFrame()
+      expect(frame).toContain("Native session")
+      expect(frame).toContain("OpenCode · ~/profile")
+      // The current-directory scope hides sessions from other directories until ctrl+a.
+      expect(frame).not.toContain("Remote work")
 
-    app.mockInput.pressKey("a", { ctrl: true })
-    await app.waitForFrame((value) => value.includes("Remote work"))
+      app.mockInput.pressKey("a", { ctrl: true })
+      await app.waitForFrame((value) => value.includes("Remote work"))
 
-    const lines = app.captureCharFrame().split("\n")
-    const row = lines.findIndex((line) => line.includes("Staging work"))
-    await app.mockMouse.click(lines[row]!.indexOf("Staging work") + 2, row)
-    const viewer = await app.waitForFrame((value) => value.includes("Read-only · ~/profile"))
-    expect(viewer).toContain("Hello from the staging installation")
-  } finally {
-    app.renderer.destroy()
-    await temporary[Symbol.asyncDispose]()
-  }
+      const lines = app.captureCharFrame().split("\n")
+      const row = lines.findIndex((line) => line.includes("Staging work"))
+      await app.mockMouse.click(lines[row]!.indexOf("Staging work") + 2, row)
+      const viewer = await app.waitForFrame((value) => value.includes("Read-only · ~/profile"))
+      expect(viewer).toContain("Hello from the staging installation")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
 })
 
 test("external sessions refuse destructive actions while native sessions keep them", async () => {
   await using temporary = await tmpdir()
   const root = path.join(temporary.path, "home", "profile")
   createExternalRoot(root, [{ id: "ses_staging", title: "Staging work", directory: process.cwd() }])
-  const { app } = await setupDialog(root, temporary)
+  await withoutDiscoveryOverrides(async () => {
+    const { app } = await setupDialog(root, temporary)
 
-  try {
-    await app.waitForFrame((frame) => frame.includes("Staging work"))
-    await app.waitForVisualIdle({ quietFrames: 3 })
+    try {
+      await app.waitForFrame((frame) => frame.includes("Staging work"))
+      await app.waitForVisualIdle({ quietFrames: 3 })
 
-    // The selected row starts on the native session; move down to the external one.
-    app.mockInput.pressKey("ARROW_DOWN")
-    await app.waitForVisualIdle({ quietFrames: 3 })
-    app.mockInput.pressKey("d", { ctrl: true })
-    await app.waitForVisualIdle({ quietFrames: 3 })
-    expect(app.captureCharFrame()).not.toContain("again to confirm")
+      // The selected row starts on the native session; move down to the external one.
+      app.mockInput.pressKey("ARROW_DOWN")
+      await app.waitForVisualIdle({ quietFrames: 3 })
+      app.mockInput.pressKey("d", { ctrl: true })
+      await app.waitForVisualIdle({ quietFrames: 3 })
+      expect(app.captureCharFrame()).not.toContain("again to confirm")
 
-    app.mockInput.pressKey("ARROW_UP")
-    await app.waitForVisualIdle({ quietFrames: 3 })
-    app.mockInput.pressKey("d", { ctrl: true })
-    await app.waitForFrame((frame) => frame.includes("again to confirm"))
-    expect(app.captureCharFrame()).not.toContain("Hello from the staging installation")
-  } finally {
-    app.renderer.destroy()
-    await temporary[Symbol.asyncDispose]()
-  }
+      app.mockInput.pressKey("ARROW_UP")
+      await app.waitForVisualIdle({ quietFrames: 3 })
+      app.mockInput.pressKey("d", { ctrl: true })
+      await app.waitForFrame((frame) => frame.includes("again to confirm"))
+      expect(app.captureCharFrame()).not.toContain("Hello from the staging installation")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
 })

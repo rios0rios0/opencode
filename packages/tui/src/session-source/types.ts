@@ -1,6 +1,16 @@
 /** A session discovered in a local store owned by another OpenCode installation or harness. */
 export type SessionHarness = "opencode" | "claude-code" | "codex"
 
+/** Display names for harness sections in the picker and the read-only viewer. */
+export const HARNESS_LABELS: Record<SessionHarness, string> = {
+  opencode: "OpenCode",
+  "claude-code": "Claude Code",
+  codex: "Codex",
+}
+
+/** The order harness sections appear in the picker. */
+export const HARNESS_ORDER: readonly SessionHarness[] = ["opencode", "claude-code", "codex"]
+
 export type ExternalSession = Readonly<{
   /** Dialog option key. Distinct from native session IDs so external rows never alias them. */
   key: string

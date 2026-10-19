@@ -1,17 +1,15 @@
 import { Database } from "#zed-sqlite"
-import { readdirSync, realpathSync, statSync } from "node:fs"
+import { readdirSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { Option, Schema } from "effect"
 import { errorMessage } from "../util/error"
+import { decodeJsonRecord, MAX_TRANSCRIPT_ENTRIES, truncateEntryText } from "./jsonl"
+import { canonicalPath, displayPath, expandHome, isDirectory } from "./paths"
 import type { ExternalBrowseResult, ExternalReadResult, ExternalSession, ExternalTranscriptEntry } from "./types"
 
 /** Bounds discovery so listing sessions from a foreign store never grows with its whole history. */
 const MAX_SESSIONS_PER_DATABASE = 200
-/** Bounds a single transcript read; the reader reports when it truncates. */
-const MAX_TRANSCRIPT_ENTRIES = 1000
-/** Bounds one rendered entry; full tool payloads and pastes stay out of the read-only viewer. */
-const MAX_ENTRY_TEXT = 8000
 
 const REQUIRED_SESSION_COLUMNS = ["id", "project_id", "parent_id", "directory", "title", "time_created", "time_updated"]
 const REQUIRED_MESSAGE_COLUMNS = ["id", "type", "seq", "data", "time_created"]
@@ -54,7 +52,6 @@ const MessageRowSchema = Schema.Struct({
   time_created: Schema.Number,
 })
 const decodeMessageRow = Schema.decodeUnknownOption(MessageRowSchema)
-const decodeJsonRecord = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))
 const decodeTextPayload = Schema.decodeUnknownOption(Schema.Struct({ text: Schema.String }))
 const decodeAssistantPayload = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -309,7 +306,7 @@ function messageEntries(row: MessageRow): ExternalTranscriptEntry[] | "malformed
   const entry = (kind: ExternalTranscriptEntry["kind"], text: string): ExternalTranscriptEntry => ({
     id: row.id,
     kind,
-    text: truncateText(text),
+    text: truncateEntryText(text),
     created: row.time_created,
   })
 
@@ -348,38 +345,4 @@ function messageEntries(row: MessageRow): ExternalTranscriptEntry[] | "malformed
   }
 
   return []
-}
-
-function truncateText(text: string) {
-  if (text.length <= MAX_ENTRY_TEXT) return text
-  return text.slice(0, MAX_ENTRY_TEXT) + "\n… (truncated)"
-}
-
-function expandHome(input: string, home: string) {
-  if (input === "~") return home
-  if (input.startsWith("~/") || input.startsWith("~\\")) return path.join(home, input.slice(2))
-  return input
-}
-
-function displayPath(directory: string, home: string) {
-  const relative = path.relative(home, directory)
-  if (relative === "") return "~"
-  if (!relative.startsWith("..") && !path.isAbsolute(relative)) return `~/${relative.split(path.sep).join("/")}`
-  return directory
-}
-
-function canonicalPath(directory: string) {
-  try {
-    return realpathSync(directory)
-  } catch {
-    return directory
-  }
-}
-
-function isDirectory(directory: string) {
-  try {
-    return statSync(directory).isDirectory()
-  } catch {
-    return false
-  }
 }

@@ -1,4 +1,10 @@
-import path from "node:path"
+import {
+  browseClaudeCodeSessions,
+  readClaudeCodeSession,
+  resolveClaudeCodeRoot,
+  type ClaudeCodeRootInput,
+} from "./claude-code"
+import { browseCodexSessions, readCodexSession, resolveCodexRoot, type CodexRootInput } from "./codex"
 import {
   browseOpenCodeSessions,
   readOpenCodeSession,
@@ -6,6 +12,7 @@ import {
   type OpenCodeRoot,
   type OpenCodeRootInput,
 } from "./opencode"
+import { sameDirectory } from "./paths"
 import type { ExternalBrowseResult, ExternalReadResult, ExternalSession } from "./types"
 
 export type {
@@ -15,30 +22,55 @@ export type {
   ExternalTranscriptEntry,
   SessionHarness,
 } from "./types"
-export { browseOpenCodeSessions, readOpenCodeSession, resolveOpenCodeRoots, type OpenCodeRoot, type OpenCodeRootInput }
+export { HARNESS_LABELS, HARNESS_ORDER } from "./types"
+export {
+  browseClaudeCodeSessions,
+  browseOpenCodeSessions,
+  browseCodexSessions,
+  readClaudeCodeSession,
+  readCodexSession,
+  readOpenCodeSession,
+  resolveClaudeCodeRoot,
+  resolveCodexRoot,
+  resolveOpenCodeRoots,
+  sameDirectory,
+  type ClaudeCodeRootInput,
+  type CodexRootInput,
+  type OpenCodeRoot,
+  type OpenCodeRootInput,
+}
+
+/** Discovery input shared by every harness adapter: OpenCode roots plus the common home. */
+export type ExternalBrowseInput = OpenCodeRootInput
 
 /**
  * Lists read-only sessions from every supported external source: other OpenCode installations
- * discovered through standard data locations and configured roots. Harness adapters are added
- * per source; their storage formats never leak into the native session model.
+ * discovered through standard data locations and configured roots, plus the local Claude Code
+ * and Codex stores. Harness adapters are isolated per source; their storage formats never leak
+ * into the native session model.
  */
-export async function browseExternalSessions(input: OpenCodeRootInput = {}): Promise<ExternalBrowseResult> {
-  return browseOpenCodeSessions(input)
+export async function browseExternalSessions(input: ExternalBrowseInput = {}): Promise<ExternalBrowseResult> {
+  const [opencode, claude, codex] = await Promise.all([
+    browseOpenCodeSessions(input),
+    browseClaudeCodeSessions(input),
+    browseCodexSessions(input),
+  ])
+  return {
+    sessions: [...opencode.sessions, ...claude.sessions, ...codex.sessions].sort(
+      (left, right) => right.time.updated - left.time.updated || left.key.localeCompare(right.key),
+    ),
+    warnings: [...opencode.warnings, ...claude.warnings, ...codex.warnings],
+  }
 }
 
 /** Reads one discovered session's history from its own source, never from the active store. */
 export async function readExternalSession(session: ExternalSession): Promise<ExternalReadResult> {
-  if (session.harness === "opencode") return readOpenCodeSession(session)
-  return { entries: [], warnings: [`Reading ${session.harness} sessions is not supported`] }
-}
-
-/**
- * Compares session directories across stores. Stored paths always use forward slashes; on
- * Windows the comparison is case-insensitive. Prefixes never match, so unrelated projects that
- * merely share a path prefix stay apart.
- */
-export function sameDirectory(left: string, right: string) {
-  const a = path.resolve(left.replaceAll("\\", "/"))
-  const b = path.resolve(right.replaceAll("\\", "/"))
-  return process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b
+  switch (session.harness) {
+    case "opencode":
+      return readOpenCodeSession(session)
+    case "claude-code":
+      return readClaudeCodeSession(session)
+    case "codex":
+      return readCodexSession(session)
+  }
 }
