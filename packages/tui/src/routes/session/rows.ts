@@ -22,6 +22,7 @@ import {
   defaultVerbosity,
 } from "./grouping/session"
 import { groupID } from "./anchors"
+import { hasVisibleText } from "../../util/visible-text"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
 /**
@@ -272,22 +273,22 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     data.on("session.agent.selected", message),
     data.on("session.model.selected", message),
     data.on("session.text.delta", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.delta.trim())
+      if (event.data.sessionID === sessionID() && hasVisibleText(event.data.delta))
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` }, { type: "text" })
     }),
     data.on("session.text.ended", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.text.trim())
+      if (event.data.sessionID === sessionID() && hasVisibleText(event.data.text))
         appendPart({ messageID: event.data.assistantMessageID, partID: `text:${event.data.ordinal}` }, { type: "text" })
     }),
     data.on("session.reasoning.delta", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.delta.trim())
+      if (event.data.sessionID === sessionID() && hasVisibleText(event.data.delta))
         appendPart(
           { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
           { type: "reasoning" },
         )
     }),
     data.on("session.reasoning.ended", (event) => {
-      if (event.data.sessionID === sessionID() && event.data.text.trim())
+      if (event.data.sessionID === sessionID() && hasVisibleText(event.data.text))
         appendPart(
           { messageID: event.data.assistantMessageID, partID: `reasoning:${event.data.ordinal}` },
           { type: "reasoning", time: { completed: event.created } },
@@ -393,7 +394,7 @@ export function reduceSessionRows(
     const ordinals = { text: 0, reasoning: 0 }
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
-      if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
+      if ((part.type === "text" || part.type === "reasoning") && !hasVisibleText(part.text)) return
       rows.push({
         entry: { type: "part", ref: { messageID: message.id, partID } },
         part,

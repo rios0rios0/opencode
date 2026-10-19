@@ -13,6 +13,7 @@ import { usePlugin } from "../../plugin/context"
 import { SplitBorder } from "../../ui/border"
 import { streamingLinkClick } from "../../ui/link"
 import { Locale } from "../../util/locale"
+import { hasVisibleText } from "../../util/visible-text"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
 import { canonicalToolName } from "../../util/tool-display"
@@ -118,7 +119,9 @@ export function ReasoningPart(props: {
 }
 
 export function reasoningContent(part: SessionMessageAssistantReasoning) {
-  // OpenRouter encrypts some reasoning blocks; drop the placeholder.
+  // OpenRouter encrypts some reasoning blocks; drop the placeholder. Zero-width-only
+  // content renders nothing, so it is treated as empty here as well.
+  if (!hasVisibleText(part.text)) return ""
   return part.text.replace("[REDACTED]", "").trim()
 }
 
@@ -184,7 +187,7 @@ export function TextPart(props: {
   // Same notion of "still being written" that drives the streaming renderer itself.
   const streaming = () => props.message.time.completed === undefined
   return (
-    <Show when={props.part.text.trim()}>
+    <Show when={hasVisibleText(props.part.text)}>
       <box
         paddingLeft={3}
         flexShrink={0}
