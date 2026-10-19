@@ -7,7 +7,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createSignal } from "solid-js"
-import { footerBarLayout, PromptFooter } from "../../src/feature-plugins/prompt/footer"
+import { footerBarLayout, PromptFooter, quotaSegments } from "../../src/feature-plugins/prompt/footer"
 import { localIdentity, parsePlanUsage } from "../../src/util/plan-usage"
 
 const base = RGBA.fromInts(200, 200, 200)
@@ -233,12 +233,225 @@ test("prompt footer shows the exit hint in shell mode", async () => {
   }
 })
 
-function modelInfo() {
+test("prompt footer renders the selected OmniRoute model's quota instead of the local plan", async () => {
+  await writePlanUsage({ five: 20, seven: 83 })
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        model: { providerID: "omniroute", modelID: "openai/gpt-5.6" },
+        resolved: { providerID: "openai", modelID: "gpt-5.6" },
+        scope: { type: "upstream-account-plan", providerID: "openai", route: null },
+        status: "available",
+        plan: "Max",
+        windows: [
+          { period: "5h", windowName: "session", status: "available", usedPercentage: 42, remainingPercentage: 58 },
+          { period: "7d", windowName: "weekly", status: "available", usedPercentage: 12 },
+          { period: "30d", windowName: "monthly", status: "available", usedPercentage: 3 },
+          { period: "fable", windowName: "fable", displayName: "Fable", status: "available", usedPercentage: 43 },
+        ],
+        updatedAt: "2026-10-19T12:00:00.000Z",
+      }),
+  })
+  const app = await testRender(
+    () => (
+      <PromptFooter
+        context={footerContext({
+          current: { providerID: "omniroute", modelID: "openai/gpt-5.6" },
+          models: [modelInfo({ providerID: "omniroute", id: "openai/gpt-5.6", name: "GPT-5.6" })],
+          providers: [quotaProvider(server.url.toString())],
+          messages: [assistantMessage()],
+        })}
+        sessionID="session"
+        mode="normal"
+        showDetails
+      />
+    ),
+    { width: 200, height: 1 },
+  )
+
+  try {
+    const frame = await renderUntil(app, (value) => value.includes("5h 42%"))
+    expect(frame).toContain("7d 12%")
+    expect(frame).toContain("30d 3%")
+    expect(frame).toContain("Fable 43%")
+    // The local Claude/Fable plan cache describes the direct account, not the
+    // gateway route, so it is never shown as this model's limits.
+    await Bun.sleep(25)
+    await app.renderOnce()
+    const settled = app.captureCharFrame()
+    expect(settled).not.toContain("5h 20%")
+    expect(settled).not.toContain("7d 83%")
+    expect(settled).not.toContain("sekret-key")
+  } finally {
+    app.renderer.destroy()
+    server.stop(true)
+  }
+})
+
+test("prompt footer shows loading instead of the previous reading and omits unreadable windows", async () => {
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const server = Bun.serve({
+    port: 0,
+    fetch: async () => {
+      await gate
+      return Response.json({
+        status: "partial",
+        windows: [
+          {
+            period: "5h",
+            windowName: "session",
+            status: "stale",
+            usedPercentage: 42,
+            resetsAt: "2026-10-19T17:00:00.000Z",
+          },
+          { period: "7d", windowName: "weekly", status: "available", usedPercentage: 12 },
+          { period: "30d", windowName: "monthly", status: "unavailable" },
+        ],
+        updatedAt: "2026-10-19T12:00:00.000Z",
+      })
+    },
+  })
+  const app = await testRender(
+    () => (
+      <PromptFooter
+        context={footerContext({
+          current: { providerID: "omniroute", modelID: "openai/gpt-5.6" },
+          models: [modelInfo({ providerID: "omniroute", id: "openai/gpt-5.6", name: "GPT-5.6" })],
+          providers: [quotaProvider(server.url.toString())],
+          messages: [assistantMessage()],
+        })}
+        sessionID="session"
+        mode="normal"
+        showDetails
+      />
+    ),
+    { width: 200, height: 1 },
+  )
+
+  try {
+    const loading = await renderUntil(app, (value) => value.includes("quota …"))
+    expect(loading).not.toContain("5h 42%")
+    release()
+    const frame = await renderUntil(app, (value) => value.includes("5h 42%"))
+    expect(frame).toContain("7d 12%")
+    expect(frame).not.toContain("quota …")
+    // The gateway reported no reading for the 30d window; nothing is drawn for it.
+    expect(frame).not.toContain("30d")
+  } finally {
+    app.renderer.destroy()
+    server.stop(true)
+  }
+})
+
+test("prompt footer drops the previous model's quota as soon as the selection changes", async () => {
+  const server = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const model = new URL(request.url).searchParams.get("model")
+      return Response.json({
+        status: "available",
+        windows: [
+          { period: "5h", windowName: "session", status: "available", usedPercentage: model === "first" ? 11 : 22 },
+        ],
+        updatedAt: "2026-10-19T12:00:00.000Z",
+      })
+    },
+  })
+  const [current, setCurrent] = createSignal({ providerID: "omniroute", modelID: "first" })
+  const app = await testRender(
+    () => (
+      <PromptFooter
+        context={footerContext({
+          current: () => current(),
+          models: [
+            modelInfo({ providerID: "omniroute", id: "first", name: "First" }),
+            modelInfo({ providerID: "omniroute", id: "second", name: "Second" }),
+          ],
+          providers: [quotaProvider(server.url.toString())],
+          messages: [assistantMessage()],
+        })}
+        sessionID="session"
+        mode="normal"
+        showDetails
+      />
+    ),
+    { width: 200, height: 1 },
+  )
+
+  try {
+    expect(await renderUntil(app, (value) => value.includes("5h 11%"))).toContain("5h 11%")
+    setCurrent({ providerID: "omniroute", modelID: "second" })
+    // The old reading is gone before the new one arrives.
+    expect(await renderUntil(app, (value) => !value.includes("5h 11%"))).not.toContain("5h 11%")
+    const next = await renderUntil(app, (value) => value.includes("5h 22%"))
+    expect(next).not.toContain("quota …")
+  } finally {
+    app.renderer.destroy()
+    server.stop(true)
+  }
+})
+
+test("quota segments dim stale readings and never label missing data", () => {
+  const active = RGBA.fromInts(10, 200, 10)
+  const dimmed = RGBA.fromInts(80, 80, 80)
+  const feedback = (color: RGBA) => ({ base: color, muted: color })
+  const theme = {
+    text: {
+      base,
+      muted: subdued,
+      faint: subdued,
+      feedback: { success: feedback(active), warning: feedback(active), error: feedback(active) },
+    },
+    decrease: (color: RGBA) => (color === active ? dimmed : color),
+  } as unknown as Context["theme"]
+
+  const segments = quotaSegments(
+    {
+      state: "ready",
+      key: "k",
+      quota: {
+        status: "partial",
+        windows: [
+          { period: "5h", status: "available", usedPercentage: 42 },
+          { period: "7d", status: "stale", usedPercentage: 83 },
+          { period: "30d", status: "unavailable" },
+          { period: "bonus", windowName: "bonus", status: "available" },
+        ],
+      },
+    },
+    theme,
+  )
+  expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%"])
+  expect(segments[0].spans[0].fg).toBe(active)
+  expect(segments[1].spans[0].fg).toBe(dimmed)
+  expect(quotaSegments({ state: "loading", key: "k" }, theme)[0].spans[0].text).toBe("quota …")
+  expect(quotaSegments({ state: "idle" }, theme)).toEqual([])
+  const unlimited = quotaSegments(
+    {
+      state: "ready",
+      key: "k",
+      quota: { status: "available", windows: [{ period: "5h", status: "available", unlimited: true }] },
+    },
+    theme,
+  )
+  expect(unlimited[0].spans[0].text).toBe("5h unlimited")
+})
+
+function quotaProvider(url: string) {
+  return { id: "omniroute", name: "OmniRoute", settings: { baseURL: `${url}v1`, apiKey: "sekret-key" } }
+}
+
+function modelInfo(input?: { providerID?: string; id?: string; name?: string }) {
+  const id = input?.id ?? "model"
   return {
-    providerID: "provider",
-    id: "model",
-    modelID: "model",
-    name: "Test Model",
+    providerID: input?.providerID ?? "provider",
+    id,
+    modelID: id,
+    name: input?.name ?? "Test Model",
     limit: { context: 10_000 },
   }
 }
@@ -269,8 +482,9 @@ function assistantMessage() {
 }
 
 function footerContext(input: {
-  current?: { providerID: string; modelID: string }
+  current?: { providerID: string; modelID: string } | (() => { providerID: string; modelID: string } | undefined)
   models?: unknown[]
+  providers?: unknown[]
   messages?: unknown[]
   cost?: number
   family?: string[]
@@ -283,7 +497,7 @@ function footerContext(input: {
   return {
     location: { directory: workspace },
     theme: testTheme(),
-    ui: { model: { current: () => input.current } },
+    ui: { model: { current: () => (typeof input.current === "function" ? input.current() : input.current) } },
     keymap: {
       shortcuts: (id: string) => shortcuts[id] ?? [],
       dispatch: (id: string) => input.dispatched?.push(id),
@@ -297,7 +511,10 @@ function footerContext(input: {
         message: { list: () => input.messages ?? [] },
       },
       shell: { list: () => input.shells ?? [] },
-      location: { model: { list: () => input.models ?? [] } },
+      location: {
+        model: { list: () => input.models ?? [] },
+        provider: { list: () => input.providers ?? [] },
+      },
     },
   } as unknown as Context
 }
