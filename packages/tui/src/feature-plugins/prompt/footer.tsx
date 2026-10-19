@@ -4,6 +4,15 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { useInteractivity } from "../../context/interactivity"
 import { Locale } from "../../util/locale"
+import {
+  MODEL_QUOTA_PROVIDER,
+  MODEL_QUOTA_REFRESH,
+  quotaWindows,
+  readModelQuota,
+  windowPercent,
+  type ModelQuota,
+  type ModelQuotaWindow,
+} from "../../util/model-quota"
 import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
 import { contextUsage } from "../../util/session"
 import { stringWidth } from "../../util/string-width"
@@ -46,6 +55,7 @@ export function PromptFooter(props: {
   const [liveHovered, setLiveHovered] = createSignal(false)
   const [barWidth, setBarWidth] = createSignal<number>()
   const [plan, setPlan] = createSignal<PlanUsage>()
+  const [quota, setQuota] = createSignal<ModelQuotaState>({ state: "idle" })
   const [email, setEmail] = createSignal<string>()
   const sessionLocation = createMemo(() => {
     if (!props.sessionID) return props.context.location
@@ -93,16 +103,72 @@ export function PromptFooter(props: {
     })
   })
 
-  const modelLabel = createMemo(() => {
-    const session = props.sessionID ? props.context.data.session.get(props.sessionID) : undefined
+  const activeModel = createMemo(() => {
     const current = props.context.ui.model.current()
-    const ref = current ? { providerID: current.providerID, id: current.modelID } : session?.model
+    if (current) return { providerID: current.providerID, id: current.modelID }
+    if (!props.sessionID) return
+    return props.context.data.session.get(props.sessionID)?.model
+  })
+
+  const modelLabel = createMemo(() => {
+    const ref = activeModel()
     if (!ref) return
-    const models = props.context.data.location.model.list(session?.location ?? props.context.location)
+    const models = props.context.data.location.model.list(sessionLocation())
     const model = models?.find(
       (item) => item.providerID === ref.providerID && (item.modelID === ref.id || item.id === ref.id),
     )
     return model?.name ?? ref.id
+  })
+
+  /**
+   * Where the selected model's quota can be read: only a selection served by
+   * OmniRoute whose provider settings name an origin. The key covers the model
+   * too, so changing the selection immediately invalidates the last reading.
+   */
+  const quotaTarget = createMemo(() => {
+    const ref = activeModel()
+    if (!ref || ref.providerID !== MODEL_QUOTA_PROVIDER) return
+    const provider = props.context.data.location.provider
+      .list(sessionLocation())
+      ?.find((item) => item.id === ref.providerID)
+    const settings = provider?.settings
+    if (!settings) return
+    const baseURL = typeof settings.baseURL === "string" ? settings.baseURL : undefined
+    if (!baseURL) return
+    return {
+      key: `${baseURL}\u0000${ref.id}`,
+      baseURL,
+      apiKey: typeof settings.apiKey === "string" && settings.apiKey ? settings.apiKey : undefined,
+      modelID: ref.id,
+    }
+  })
+
+  const applyQuota = (key: string, result?: ModelQuota) => {
+    if (quotaTarget()?.key !== key) return
+    setQuota({ state: "ready", key, quota: result })
+  }
+
+  createEffect(() => {
+    const target = quotaTarget()
+    if (!target) {
+      setQuota({ state: "idle" })
+      return
+    }
+    // The previous model's windows are dropped as soon as the selection
+    // changes, so they are never briefly shown as the new model's quota.
+    setQuota({ state: "loading", key: target.key })
+    const controller = new AbortController()
+    void readModelQuota(target, controller.signal).then((result) => applyQuota(target.key, result))
+    onCleanup(() => controller.abort())
+  })
+
+  onMount(() => {
+    const timer = setInterval(() => {
+      const target = quotaTarget()
+      if (!target) return
+      void readModelQuota(target).then((result) => applyQuota(target.key, result))
+    }, MODEL_QUOTA_REFRESH)
+    onCleanup(() => clearInterval(timer))
   })
 
   const liveText = createMemo(() => {
@@ -143,8 +209,15 @@ export function PromptFooter(props: {
         list.push(segment("ctx", 100, spans))
       }
     }
-    const limits = plan()
-    if (limits) list.push(...planSegments(limits, theme))
+    if (activeModel()?.providerID === MODEL_QUOTA_PROVIDER) {
+      // Direct OpenCode/Fable plan limits describe the local account, not the
+      // route the gateway picked, so an OmniRoute model only shows the quota
+      // the gateway reports for that model.
+      list.push(...quotaSegments(quota(), theme))
+    } else {
+      const limits = plan()
+      if (limits) list.push(...planSegments(limits, theme))
+    }
     if (props.sessionID) {
       const cost = props.context.data.session.cost(props.sessionID)
       if (cost > 0) list.push(segment("cost", 50, [{ text: money.format(cost), fg: theme.text.muted }]))
@@ -334,6 +407,43 @@ function severity(theme: Plugin.Context["theme"], percent: number) {
   if (percent >= 90) return theme.text.feedback.error.base
   if (percent >= 70) return theme.text.feedback.warning.base
   return theme.text.feedback.success.base
+}
+
+export type ModelQuotaState =
+  | { state: "idle" }
+  | { state: "loading"; key: string }
+  | { state: "ready"; key: string; quota?: ModelQuota }
+
+const QUOTA_CANONICAL_PERIOD = /^(5h|7d|30d)$/
+
+/**
+ * Quota windows for the selected model. Only what the gateway reported is
+ * drawn: a pending read shows a placeholder instead of the previous model's
+ * numbers, stale windows are dimmed, and unavailable or unsupported windows
+ * are omitted rather than shown as unlimited. Window counts, percentages and
+ * reset times come from the answer; nothing is inferred from the model id, and
+ * no account identifier or credential ever reaches the bar.
+ */
+export function quotaSegments(quota: ModelQuotaState, theme: Plugin.Context["theme"]): FooterBarSegment[] {
+  if (quota.state === "loading") return [segment("quota:loading", 86, [{ text: "quota …", fg: theme.text.faint }])]
+  if (quota.state !== "ready" || !quota.quota) return []
+  return quotaWindows(quota.quota).flatMap((window, index) => quotaSegment(window, index, theme))
+}
+
+function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Context["theme"]): FooterBarSegment[] {
+  const priority = 85 - Math.min(index, 30)
+  const label = QUOTA_CANONICAL_PERIOD.test(window.period) ? window.period : (window.displayName ?? window.period)
+  const percent = windowPercent(window)
+  if (percent === undefined) {
+    if (window.unlimited !== true) return []
+    return [segment(`quota:${index}`, priority, [{ text: `${label} unlimited`, fg: theme.text.muted }])]
+  }
+  const fg = window.status === "stale" ? theme.decrease(severity(theme, percent)) : severity(theme, percent)
+  const reset = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
+  const tail = Number.isNaN(reset)
+    ? []
+    : [{ text: ` (${resetLabel(reset / 1000, window.period !== "5h")})`, fg: theme.text.faint }]
+  return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(percent)}%`, fg }], tail)]
 }
 
 function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
