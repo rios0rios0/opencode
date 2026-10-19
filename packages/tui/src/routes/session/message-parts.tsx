@@ -11,6 +11,7 @@ import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
 import { reasoningSummary } from "../../context/thinking"
 import { usePlugin } from "../../plugin/context"
 import { SplitBorder } from "../../ui/border"
+import { streamingLinkClick } from "../../ui/link"
 import { Locale } from "../../util/locale"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
@@ -179,15 +180,25 @@ export function TextPart(props: {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
   const plugins = usePlugin()
+  const renderer = useRenderer()
+  // Same notion of "still being written" that drives the streaming renderer itself.
+  const streaming = () => props.message.time.completed === undefined
   return (
     <Show when={props.part.text.trim()}>
-      <box paddingLeft={3} flexShrink={0}>
+      <box
+        paddingLeft={3}
+        flexShrink={0}
+        onMouseUp={(event) => {
+          // A streaming part can still extend any URL it shows, so its links open only once it has completed.
+          if (streamingLinkClick(renderer, event, streaming())) event.stopPropagation()
+        }}
+      >
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
           renderNode={plugins.markdown()}
           content={props.part.text.trim()}
-          streaming={props.message.time.completed === undefined}
+          streaming={streaming()}
           internalBlockMode="top-level"
           tableOptions={{ style: "grid", cellPaddingX: 1 }}
           conceal={ctx.markdownMode() === "rendered"}
