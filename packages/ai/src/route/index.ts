@@ -17,6 +17,7 @@ export type {
   TriggerCompactOptions,
 } from "./client.js"
 export * from "./executor.js"
+export * from "./omniroute.js"
 export { Auth } from "./auth.js"
 export { AuthOptions } from "./auth-options.js"
 export { Endpoint } from "./endpoint.js"
