@@ -5,6 +5,7 @@ import { useClipboard } from "../../context/clipboard"
 import { useToast } from "../../ui/toast"
 import { useClient } from "../../context/client"
 import { errorMessage } from "../../util/error"
+import { routedDetails, routedInfo, routedLabel } from "../../util/omniroute-routed"
 import { DialogFork } from "./dialog-fork"
 import type { PromptInfo } from "../../prompt/history"
 import { projectedPromptInput } from "../../prompt/codec"
@@ -21,12 +22,27 @@ export function DialogMessage(props: {
   const client = useClient()
   const newDesigns = useNewDesigns()
   const message = createMemo(() => data.session.message.get(props.sessionID, props.messageID))
+  const routed = createMemo(() => {
+    const value = message()
+    return value?.type === "assistant" ? routedInfo(value.native) : undefined
+  })
 
   return (
     <DialogSelect
       title="Message Actions"
       renderFilter={!newDesigns()}
       options={[
+        ...(routed()
+          ? [
+              {
+                title: `Routed: ${routedLabel(routed()!)}`,
+                value: "message.routed",
+                description: "the upstream model that served this response",
+                details: routedDetails(routed()!),
+                disabled: true,
+              },
+            ]
+          : []),
         {
           title: "Jump to",
           value: "message.jump",

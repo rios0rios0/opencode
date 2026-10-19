@@ -8,11 +8,17 @@ import type { HttpMiddleware, Transport, TransportRuntime, WebSocketChannelExecu
 import type { Protocol } from "./protocol.js"
 import { applyCachePolicy } from "../cache-policy.js"
 import { applyEffortUpdates } from "../effort-updates.js"
+import { omniRouteRouted, type OmniRouteRouted } from "./omniroute.js"
 import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
 import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
-import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
+import type {
+  LanguageModelSanitizerCompatibility,
+  ProtocolID,
+  ProviderMetadata,
+  ProviderOptions,
+} from "../schema/index.js"
 import {
   AIError,
   CompactionResponse,
@@ -321,6 +327,18 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, undefined, cause)
 }
 
+/** Attach the routed gateway result to one event under the route's metadata key, preserving its own state. */
+function attachRoutedMetadata(event: LLMEvent, key: string, routed: OmniRouteRouted): LLMEvent {
+  const metadata = (event as { readonly providerMetadata?: ProviderMetadata }).providerMetadata
+  return {
+    ...event,
+    providerMetadata: {
+      ...(metadata ?? {}),
+      [key]: { ...(metadata?.[key] ?? {}), routed },
+    },
+  } as LLMEvent
+}
+
 const incompleteStreamError = (route: string) =>
   new AIError({
     reason: new InvalidProviderOutputError({
@@ -418,6 +436,9 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           routeInput.transport.execute(prepared, request, runtime, options).pipe(
             Effect.map((execution) => {
               const terminal = protocol.stream.terminal
+              // OmniRoute reports which upstream model actually served the response; capture it once
+              // per response so a re-route or fallback never leaks into another response's events.
+              const routed = omniRouteRouted(execution.http?.headers)
               // Preserve assembled inputs; replace only serialized event fallbacks with their original wire data.
               const frameError =
                 (frame: Frame, event: Frame | Event = frame) =>
@@ -486,7 +507,12 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
                     }),
                 ),
               )
-              return execution.complete ? stream.pipe(Stream.onEnd(execution.complete)) : stream
+              const metadataKey = routeInput.providerMetadataKey
+              const decorated =
+                routed && metadataKey
+                  ? stream.pipe(Stream.map((event) => attachRoutedMetadata(event, metadataKey, routed)))
+                  : stream
+              return execution.complete ? decorated.pipe(Stream.onEnd(execution.complete)) : decorated
             }),
           ),
         )

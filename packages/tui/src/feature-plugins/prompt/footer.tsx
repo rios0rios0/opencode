@@ -14,6 +14,7 @@ import {
   type ModelQuotaWindow,
 } from "../../util/model-quota"
 import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
+import { routedInfo, routedLabel } from "../../util/omniroute-routed"
 import { contextUsage } from "../../util/session"
 import { stringWidth } from "../../util/string-width"
 
@@ -120,6 +121,15 @@ export function PromptFooter(props: {
     return model?.name ?? ref.id
   })
 
+  /** The gateway result of the most recent assistant step, shown next to the selected model. */
+  const lastRouted = createMemo(() => {
+    if (!props.sessionID) return
+    const last = props.context.data.session.message
+      .list(props.sessionID)
+      .findLast((message) => message.type === "assistant")
+    return routedInfo(last?.native)
+  })
+
   /**
    * Where the selected model's quota can be read: only a selection served by
    * OmniRoute whose provider settings name an origin. The key covers the model
@@ -186,6 +196,8 @@ export function PromptFooter(props: {
     if (mail) list.push(segment("email", 88, [{ text: mail, fg: theme.text.faint }]))
     const model = modelLabel()
     if (model) list.push(segment("model", 95, [{ text: model, fg: theme.text.base }]))
+    const routed = lastRouted()
+    if (routed) list.push(segment("routed", 90, [{ text: `routed: ${routedLabel(routed)}`, fg: theme.text.muted }]))
     if (props.sessionID) {
       const session = props.context.data.session.get(props.sessionID)
       const usage = session
