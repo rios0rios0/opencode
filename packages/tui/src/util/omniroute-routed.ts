@@ -1,6 +1,7 @@
 export type RoutedInfo = {
   model?: string
   provider?: string
+  connection?: string
   decision?: string
   cost?: string
   tokensIn?: number
@@ -22,12 +23,13 @@ export function routedInfo(state: Record<string, unknown> | undefined): RoutedIn
   const value = state?.routed
   if (typeof value !== "object" || value === null) return undefined
   const record = value as Record<string, unknown>
-  const text = (key: string) => (typeof record[key] === "string" ? (record[key] as string) : undefined)
+  const text = (key: string) => (typeof record[key] === "string" && record[key].trim() ? record[key].trim() : undefined)
   const number = (key: string) => (typeof record[key] === "number" ? (record[key] as number) : undefined)
   const boolean = (key: string) => (typeof record[key] === "boolean" ? (record[key] as boolean) : undefined)
   const info: RoutedInfo = {
     model: text("model"),
     provider: text("provider"),
+    connection: text("connection"),
     decision: text("decision"),
     cost: text("cost"),
     tokensIn: number("tokensIn"),
@@ -39,7 +41,13 @@ export function routedInfo(state: Record<string, unknown> | undefined): RoutedIn
     requestID: text("requestID"),
     version: text("version"),
   }
-  if (info.model === undefined && info.provider === undefined && info.decision === undefined) return undefined
+  if (
+    info.model === undefined &&
+    info.provider === undefined &&
+    info.connection === undefined &&
+    info.decision === undefined
+  )
+    return undefined
   return info
 }
 

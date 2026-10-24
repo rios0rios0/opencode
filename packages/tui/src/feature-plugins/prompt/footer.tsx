@@ -57,7 +57,6 @@ export function PromptFooter(props: {
   const [barWidth, setBarWidth] = createSignal<number>()
   const [plan, setPlan] = createSignal<PlanUsage>()
   const [quota, setQuota] = createSignal<ModelQuotaState>({ state: "idle" })
-  const [email, setEmail] = createSignal<string>()
   const sessionLocation = createMemo(() => {
     if (!props.sessionID) return props.context.location
     return props.context.data.session.get(props.sessionID)?.location ?? props.context.location
@@ -96,14 +95,6 @@ export function PromptFooter(props: {
     })
   })
 
-  createEffect(() => {
-    const directory = sessionLocation()?.directory
-    if (!directory) return
-    void gitEmail(directory).then((value) => {
-      if (sessionLocation()?.directory === directory) setEmail(value)
-    })
-  })
-
   const activeModel = createMemo(() => {
     const current = props.context.ui.model.current()
     if (current) return { providerID: current.providerID, id: current.modelID }
@@ -129,6 +120,7 @@ export function PromptFooter(props: {
       .findLast((message) => message.type === "assistant")
     return routedInfo(last?.native)
   })
+  const accountLabel = createMemo(() => lastRouted()?.connection)
 
   /**
    * Where the selected model's quota can be read: only a selection served by
@@ -192,8 +184,8 @@ export function PromptFooter(props: {
     const list: FooterBarSegment[] = []
     const identity = localIdentity()
     if (identity) list.push(segment("identity", 90, [{ text: identity, fg: theme.text.muted }]))
-    const mail = email()
-    if (mail) list.push(segment("email", 88, [{ text: mail, fg: theme.text.faint }]))
+    const account = accountLabel()
+    if (account) list.push(segment("account", 99, [{ text: account, fg: theme.text.faint }]))
     const model = modelLabel()
     if (model) list.push(segment("model", 95, [{ text: model, fg: theme.text.base }]))
     const routed = lastRouted()
@@ -374,8 +366,36 @@ export default Plugin.define({
         <PromptFooter context={context} sessionID={props.sessionID} mode={props.mode} showDetails={props.showDetails} />
       ),
     })
+    context.ui.slot({
+      append: "prompt.footer.status",
+      render: (props) => <GitEmail context={context} sessionID={props.sessionID} />,
+    })
   },
 })
+
+function GitEmail(props: { context: Plugin.Context; sessionID?: string }) {
+  const location = createMemo(() => {
+    if (!props.sessionID) return props.context.location
+    return props.context.data.session.get(props.sessionID)?.location ?? props.context.location
+  })
+  const [email, setEmail] = createSignal<string>()
+  createEffect(() => {
+    const directory = location()?.directory
+    if (!directory) return
+    void gitEmail(directory).then((value) => {
+      if (location()?.directory === directory) setEmail(value)
+    })
+  })
+  return (
+    <Show when={email()}>
+      {(value) => (
+        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
+          {value()}
+        </text>
+      )}
+    </Show>
+  )
+}
 
 /**
  * Greedy status bar fit: cores are kept in priority order, and one that no
