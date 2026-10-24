@@ -47,6 +47,7 @@ testEffect(
       "content-type": "text/event-stream",
       "x-omniroute-model": "glm-5.3",
       "x-omniroute-provider": "nvidia",
+      "x-omniroute-connection-name": "NVIDIA Work",
       "x-omniroute-decision": "strategy=cost-saver; provider=nvidia; latency_ms=812",
       "x-omniroute-response-cost": "0.0042100000",
       "x-omniroute-tokens-in": "120",
@@ -70,6 +71,7 @@ testEffect(
       cacheHit: false,
       fallbackAttempts: 2,
       requestID: "req_abc",
+      connection: "NVIDIA Work",
     }
     for (const end of response.events.filter((event) => event.type === "text-end")) {
       expect(end.providerMetadata).toEqual({ omniroute: { routed } })
