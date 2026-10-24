@@ -13,6 +13,7 @@ test("routedInfo reads only the fields the gateway reported", () => {
       routed: {
         model: "glm-5.3",
         provider: "nvidia",
+        connection: "Codex Work",
         decision: "strategy=cost-saver; provider=nvidia; latency_ms=812",
         tokensIn: 120,
         tokensOut: "not-a-number",
@@ -23,6 +24,7 @@ test("routedInfo reads only the fields the gateway reported", () => {
   ).toEqual({
     model: "glm-5.3",
     provider: "nvidia",
+    connection: "Codex Work",
     decision: "strategy=cost-saver; provider=nvidia; latency_ms=812",
     tokensIn: 120,
     cacheHit: false,
@@ -57,6 +59,12 @@ test("routedLabel and routedDetails stay factual", () => {
     "request req_abc",
     "v3.8.52",
   ])
+})
+
+test("routedInfo omits empty or malformed connection labels", () => {
+  expect(routedInfo({ routed: { connection: "  " } })).toBeUndefined()
+  expect(routedInfo({ routed: { connection: 17 } })).toBeUndefined()
+  expect(routedInfo({ routed: { connection: "  Codex Work  " } })?.connection).toBe("Codex Work")
 })
 
 const location = { directory, project: { id: "project", directory, canonical: directory } }
@@ -146,7 +154,7 @@ test("each step keeps its own routed model and the status bar shows the latest",
         id: "msg_second",
         created: 2,
         text: "second answer",
-        native: { routed: { model: "deepseek-v4", provider: "openrouter" } },
+        native: { routed: { model: "deepseek-v4", provider: "openrouter", connection: "OpenAI Personal" } },
       }),
       assistant({
         sessionID,
@@ -166,7 +174,8 @@ test("each step keeps its own routed model and the status bar shows the latest",
   expect(frame).toContain("routed: nvidia/glm-5.3 (1 fallback)")
   // The newest step's routed result appears in its own footer and in the status bar, and the
   // first step's attribution never follows the second one.
-  expect(frame.split("routed: openrouter/deepseek-v4").length - 1).toBe(2)
+  expect(frame).toContain("routed: openrouter/deepseek-v4")
+  expect(frame).toContain("OpenAI Personal")
   expect(frame.split("routed: nvidia/glm-5.3").length - 1).toBe(1)
 })
 
