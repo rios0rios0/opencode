@@ -13,9 +13,8 @@ export type LocationLabelLayout = {
 
 /**
  * One-row layout for the location label, matching the Powerlevel10k reference:
- * the branch and directory stay adjacent, a branch that would leave less than
- * a recognizable directory drops instead of truncating the path to a stub,
- * and the directory preserves its root and final component when truncated.
+ * preserve the full directory before showing optional branch metadata, and
+ * preserve its root and final component when terminal width requires truncation.
  */
 export function locationLabelLayout(input: {
   directory: string
@@ -29,11 +28,8 @@ export function locationLabelLayout(input: {
     .filter(Boolean)
     .join(" ")
   const suffix = input.branch ? ` ⎇ ${input.branch}${metadata ? ` ${metadata}` : ""}` : ""
-  const showBranch = input.branch !== undefined && stringWidth(suffix) + 8 <= input.width
-  const directory = truncateFilePath(
-    input.directory,
-    showBranch ? Math.max(0, input.width - stringWidth(suffix)) : input.width,
-  )
+  const showBranch = input.branch !== undefined && stringWidth(input.directory) + stringWidth(suffix) <= input.width
+  const directory = truncateFilePath(input.directory, input.width)
   return {
     ...splitAnchor(directory),
     branch: showBranch ? input.branch : undefined,
