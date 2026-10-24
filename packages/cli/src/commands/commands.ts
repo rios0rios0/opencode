@@ -432,6 +432,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Flag.withDescription("Output format"),
               Flag.withDefault("table"),
             ),
+            query: Argument.String("query").pipe(
+              Argument.withDescription("Search session titles/aliases and browse sessions from all harnesses"),
+              Argument.optional,
+            ),
           },
         }),
         Spec.make("delete", {

@@ -2,6 +2,14 @@
 
 Release notes for OpenCode V2, newest first.
 
+## [Unreleased]
+
+### CLI
+
+#### Improvements
+
+- `session list <query>` opens the cross-harness session picker with title/alias search prefilled, including Claude Code, Codex, and OpenCode history.
+
 ## v2.0.32 — 2026-10-16
 
 ### Highlights

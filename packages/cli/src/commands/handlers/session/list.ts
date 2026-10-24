@@ -10,6 +10,19 @@ import { errorMessage } from "../../../util/error"
 const handler = Effect.fn("cli.session.list")(function* (
   input: Runtime.Input<typeof Commands.commands.session.commands.list>,
 ) {
+  if (Option.isSome(input.query)) {
+    const { runDefault } = yield* Effect.promise(() => import("../default"))
+    yield* runDefault({
+      ...Commands.defaults,
+      ...input,
+      directory: Option.none(),
+      continue: false,
+      session: Option.none(),
+      prompt: Option.none(),
+      resumeQuery: input.query.value,
+    })
+    return
+  }
   const server = yield* ServerConnection.resolve({
     server: Option.getOrUndefined(input.server),
     standalone: input.standalone,

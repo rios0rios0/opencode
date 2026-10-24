@@ -16,7 +16,9 @@ import { OpenCode } from "@opencode/client/promise"
 import { findSession } from "../../session-target"
 import { errorMessage } from "../../util/error"
 
-export default Runtime.handler(Commands, (input) =>
+export default Runtime.handler(Commands, (input) => runDefault(input))
+
+export const runDefault = (input: Runtime.Input<typeof Commands>) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
@@ -114,6 +116,11 @@ export default Runtime.handler(Commands, (input) =>
         sessionID: sessionExists ? session : undefined,
         newSessionID: sessionExists ? undefined : session,
         prompt: Option.getOrUndefined(input.prompt),
+        resumeQuery: "resumeQuery" in input
+          ? input.resumeQuery
+          : "query" in input
+            ? Option.getOrUndefined(input.query)
+            : undefined,
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },
       config: {
@@ -154,5 +161,4 @@ export default Runtime.handler(Commands, (input) =>
         runFork(effect)
       },
     }).pipe(Effect.provide(LayerNode.compile(Global.node)))
-  }),
-)
+  })

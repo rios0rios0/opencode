@@ -6,6 +6,7 @@ import { TextAttributes, type RGBA } from "@opentui/core"
 import { DIALOG_LIST_INSET, useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
+import { useArgs } from "../context/args"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
@@ -15,8 +16,7 @@ import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
-import { DialogExternalSession } from "./dialog-session-external"
-import { browseExternalSessions, HARNESS_LABELS, HARNESS_ORDER, sameDirectory, type ExternalSession } from "../session-source"
+import { browseExternalSessions, readExternalSession, HARNESS_LABELS, HARNESS_ORDER, sameDirectory, type ExternalSession } from "../session-source"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
@@ -26,6 +26,12 @@ import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { projectName } from "../util/project"
 import { useLocation } from "../context/location"
 import { useTuiPaths } from "../context/runtime"
+import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Project as ProjectSchema } from "@opencode/schema/project"
+import { Money } from "@opencode/schema/money"
+import { DateTime, Schema } from "effect"
+import { AbsolutePath } from "@opencode/schema/schema"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -41,6 +47,7 @@ export function DialogSessionList() {
   const activeLocation = useLocation()
   const paths = useTuiPaths()
   const [filter, setFilter] = createSignal("")
+  const args = useArgs()
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const [toDelete, setToDelete] = createSignal<string>()
@@ -242,6 +249,11 @@ export function DialogSessionList() {
   })
 
   onMount(() => dialog.setSize("large"))
+  onMount(() => {
+    if (!args.resumeQuery) return
+    setFilter(args.resumeQuery)
+    setSearch(args.resumeQuery)
+  })
 
   return (
     <DialogSelect
@@ -297,7 +309,36 @@ export function DialogSessionList() {
       onSelect={(option) => {
         const session = externalByKey().get(option.value)
         if (session) {
-          DialogExternalSession.show(dialog, session)
+          void readExternalSession(session)
+            .then(async (transcript) => {
+              const now = Date.now()
+              const id = Session.ID.create()
+              const location = await client.api.location.get({ location: { directory: session.directory || process.cwd() } })
+              const created = (value: number) => DateTime.makeUnsafe(value)
+              const messages: SessionMessage.Info[] = transcript.entries.flatMap((entry): SessionMessage.Info[] => {
+                if (entry.kind === "user")
+                  return [SessionMessage.User.make({ id: SessionMessage.ID.create(), type: "user", text: entry.text, files: [], agents: [], skills: [], time: { created: created(entry.created) } })]
+                if (entry.kind === "assistant")
+                  return [SessionMessage.User.make({ id: SessionMessage.ID.create(), type: "user", text: `[Imported ${HARNESS_LABELS[session.harness]} assistant response]\n${entry.text}`, files: [], agents: [], skills: [], time: { created: created(entry.created) } })]
+                return []
+              })
+              const info = Session.Info.make({
+                id,
+                projectID: ProjectSchema.ID.make(location.project.id),
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: created(now), updated: created(now) },
+                title: withTimestampedFallback(session),
+                location: { directory: AbsolutePath.make(location.directory) },
+              })
+              const imported = await client.api.session.import({
+                info: Schema.encodeSync(Session.Info)(info) as never,
+                messages: messages.map((message) => Schema.encodeSync(SessionMessage.Info)(message)) as never,
+              })
+              route.navigate({ type: "session", sessionID: imported.id })
+              dialog.clear()
+            })
+            .catch((error) => toast.show({ message: `Could not resume session: ${errorMessage(error)}`, variant: "error" }))
           return
         }
         route.navigate({ type: "session", sessionID: option.value })

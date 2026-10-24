@@ -46,6 +46,9 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
       get api() {
         return api
       },
+      get url() {
+        return url
+      },
       get persistentPty() {
         if (!persistentPty) throw new Error("Persistent terminal server endpoint is unavailable")
         return persistentPty

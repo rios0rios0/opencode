@@ -107,7 +107,7 @@ async function setupDialog(root: string, temporary: Awaited<ReturnType<typeof tm
       >
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
-            <ArgsProvider>
+          <ArgsProvider resumeQuery="Staging">
               <ConfigProvider config={createTuiResolvedConfig({ animations: false, session: { external_roots: [root] } })}>
                 <Keymap.Provider>
                   <ToastProvider>

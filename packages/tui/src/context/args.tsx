@@ -7,6 +7,7 @@ export interface Args {
   prompt?: string
   continue?: boolean
   sessionID?: string
+  resumeQuery?: string
   newSessionID?: string
   fork?: boolean
   auto?: boolean
