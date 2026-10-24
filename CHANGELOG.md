@@ -4,6 +4,12 @@ Release notes for OpenCode V2, newest first.
 
 ## [Unreleased]
 
+### TUI
+
+#### Improvements
+
+- Display OmniRoute's privacy-safe routed connection label in the status row when returned, while retaining the Git email in the location row.
+
 ### Documentation
 
 - Added an OCode feature-request index with separate briefs for each request, including the two-part OmniRoute quota API/footer work and a Powerlevel10k-inspired footer/status bar.

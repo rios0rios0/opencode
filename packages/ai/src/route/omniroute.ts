@@ -3,6 +3,7 @@ export type OmniRouteRouted = Record<string, string | number | boolean>
 const OMNIROUTE_HEADERS = {
   model: "x-omniroute-model",
   provider: "x-omniroute-provider",
+  connection: "x-omniroute-connection-name",
   decision: "x-omniroute-decision",
   cost: "x-omniroute-response-cost",
   tokensIn: "x-omniroute-tokens-in",

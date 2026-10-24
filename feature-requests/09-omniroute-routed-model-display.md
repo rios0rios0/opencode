@@ -26,6 +26,7 @@ OmniRoute documents its response headers in `docs/reference/API_REFERENCE.md` (v
 | `X-OmniRoute-Cache-Hit`, `X-OmniRoute-Cache`, `X-OmniRoute-Cost-Saved`                                   | Cache result and the avoided cost on a hit                                                            | Cost-telemetry set / non-streaming |
 | `X-OmniRoute-Fallback-Attempts`                                                                          | Fallback count of the request                                                                         | Only when greater than zero        |
 | `X-OmniRoute-Request-Id`, `X-OmniRoute-Version`                                                          | Correlation id and gateway build                                                                      | Cost-telemetry set / always        |
+| `X-OmniRoute-Connection-Name`                                                                           | Privacy-safe configured display name of the connection used for this response                        | Proposed; requires an OmniRoute contract |
 
 OmniRoute emits the cost-telemetry set on non-streaming success responses of `/v1/chat/completions`, `/v1/responses`, `/v1/messages`, and the media endpoints, and `X-OmniRoute-Decision` on completion responses. OCode streams by default, so treat every value as best-effort per response, as described below.
 
@@ -42,6 +43,8 @@ OmniRoute emits the cost-telemetry set on non-streaming success responses of `/v
 - Works for streaming and non-streaming requests: response headers that arrive with the streamed response are used; values OmniRoute only exposes on non-streaming success are shown when present and omitted otherwise. If OmniRoute cannot expose a needed value for streaming requests, coordinate a completion signal with OmniRoute rather than fabricating one.
 - Persist the routed result with the step so a reloaded transcript still shows which model served it.
 - Do not display credentials, API keys, or account identifiers. The request id, model, provider, cost, tokens, latency, cache, fallback, and version are safe to show or log.
+- When OmniRoute provides `X-OmniRoute-Connection-Name`, show that configured safe label as the selected account identity. Never infer it from provider/model names or substitute an email, raw connection ID, or API-key ID. OmniRoute must omit it when no safe configured label is available.
+- Keep the local Git `user.email` visible in the location row; the connection label occupies its former status-row position.
 
 ## Relevant OCode Areas
 
