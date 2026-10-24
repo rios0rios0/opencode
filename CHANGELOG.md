@@ -4,6 +4,12 @@ Release notes for OpenCode V2, newest first.
 
 ## [Unreleased]
 
+### TUI
+
+#### Improvements
+
+- Preserved the full working-directory path in the footer when it fits, prioritizing it over optional branch metadata.
+
 ### Documentation
 
 - Added an OCode feature-request index with separate briefs for each request, including the two-part OmniRoute quota API/footer work and a Powerlevel10k-inspired footer/status bar.

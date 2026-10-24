@@ -23,7 +23,16 @@ test("locationLabelLayout appends ahead/behind metadata to the branch", () => {
   })
 })
 
-test("a narrow width drops the branch instead of truncating the directory to a stub", () => {
+test("locationLabelLayout preserves the full directory and drops branch metadata when both do not fit", () => {
+  expect(locationLabelLayout({ directory: "/home/user/dev/opencode", branch: "main", width: 24 })).toEqual({
+    prefix: "/home/user/dev/",
+    anchor: "opencode",
+    branch: undefined,
+    metadata: undefined,
+  })
+})
+
+test("a narrow width truncates the directory and drops the branch", () => {
   const layout = locationLabelLayout({ directory: "/home/user/dev/opencode", branch: "feature/sidebar", width: 20 })
   expect(layout?.branch).toBeUndefined()
   expect(layout?.metadata).toBeUndefined()
