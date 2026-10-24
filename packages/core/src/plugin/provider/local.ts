@@ -18,6 +18,10 @@ export type LocalModel = {
   readonly tools?: boolean
   readonly vision?: boolean
   readonly context?: number | null
+  readonly variants?: readonly {
+    readonly id: string
+    readonly settings?: { readonly reasoningEffort?: string }
+  }[]
 }
 
 export type LocalDiscoveryClient = ReturnType<typeof createClient>
@@ -85,6 +89,10 @@ export function createLocalProviderPlugin<Discovered>(input: {
                 input: ["text", ...(spec.vision ? ["image"] : [])],
                 output: ["text"],
               }
+              model.variants = (spec.variants ?? []).map((variant) => ({
+                id: Model.VariantID.make(variant.id),
+                ...(variant.settings ? { settings: variant.settings } : {}),
+              }))
               if (typeof spec.context === "number" && spec.context > 0) model.limit.context = spec.context
             })
           }

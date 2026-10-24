@@ -11,6 +11,7 @@ const RemoteModel = Schema.Struct({
   capabilities: Schema.Struct({
     tool_calling: Schema.Boolean.pipe(Schema.optional),
     reasoning: Schema.Boolean.pipe(Schema.optional),
+    effort_tiers: Schema.Array(Schema.String).pipe(Schema.optional),
   }).pipe(Schema.optional),
 })
 
@@ -33,13 +34,21 @@ export const make = createLocalProviderPlugin({
         )
         .toSorted((a, b) => a.id.localeCompare(b.id))
     }),
-  model: (item) => ({
-    id: item.id,
-    name: item.name || item.id,
-    tools: item.capabilities?.tool_calling ?? false,
-    vision: (item.input_modalities ?? []).includes("image"),
-    context: item.context_length ?? null,
-  }),
+  model: (item) => {
+    const efforts = (item.capabilities?.effort_tiers ?? []).filter(
+      (effort) => effort !== "none" && effort !== "default",
+    )
+    return {
+      id: item.id,
+      name: item.name || item.id,
+      tools: item.capabilities?.tool_calling ?? false,
+      vision: (item.input_modalities ?? []).includes("image"),
+      context: item.context_length ?? null,
+      ...(efforts.length > 0
+        ? { variants: efforts.map((effort) => ({ id: effort, settings: { reasoningEffort: effort } })) }
+        : {}),
+    }
+  },
 })
 
 export const OmniRoutePlugin = make()
