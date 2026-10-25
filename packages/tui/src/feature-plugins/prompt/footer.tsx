@@ -33,14 +33,14 @@ const QUOTA_STATUS_HEALTHY_ABOVE = 50
 const QUOTA_STATUS_CRITICAL_AT_OR_BELOW = 20
 
 function capacityColor(theme: Plugin.Context["theme"], remaining: number): RGBA {
-  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return ansiToRgba(160)
+  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return ansiToRgba(196)
   if (remaining <= QUOTA_STATUS_HEALTHY_ABOVE) return ansiToRgba(178)
   return ansiToRgba(76)
 }
 
 function contextColor(remaining: number): RGBA {
   const severity = contextSeverity(remaining)
-  if (severity === "error") return ansiToRgba(160)
+  if (severity === "error") return ansiToRgba(196)
   if (severity === "warning") return ansiToRgba(178)
   return ansiToRgba(76)
 }
@@ -414,7 +414,7 @@ function GitEmail(props: { context: Plugin.Context; sessionID?: string }) {
     <Show when={email()}>
       {(value) => (
         <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
-          <span style={{ fg: props.context.theme.text.muted }}>›</span>
+          <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR}</span>
           {value()}
         </text>
       )}

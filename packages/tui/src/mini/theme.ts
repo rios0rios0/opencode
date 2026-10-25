@@ -179,7 +179,7 @@ function map(
       gitConflicted: exact(RGBA.fromIndex(196, ansiToRgba(196))),
       contextHealthy: exact(RGBA.fromIndex(76, ansiToRgba(76))),
       contextWarning: exact(RGBA.fromIndex(178, ansiToRgba(178))),
-      contextCritical: exact(RGBA.fromIndex(160, ansiToRgba(160))),
+      contextCritical: exact(RGBA.fromIndex(196, ansiToRgba(196))),
     },
     entry: {
       system: { body: scrollback(theme.text.muted) },
