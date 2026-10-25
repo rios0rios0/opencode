@@ -1017,7 +1017,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                       <Show when={busy()}>
                         <box width={1} flexShrink={0} />
                       </Show>
-                      <text id="mini-location" wrapMode="none" truncate width={statusWidth()} flexShrink={0} fg={theme().muted}>
+                      <text id="mini-location" wrapMode="none" width={statusWidth()} flexShrink={0} fg={theme().muted}>
                         <span style={{ fg: theme().muted }}>{layout().prefix}</span>
                         <b style={{ fg: theme().text }}>{layout().anchor}</b>
                         <Show when={layout().branch}>

@@ -8,6 +8,7 @@ Release notes for OpenCode V2, newest first.
 
 #### Improvements
 
+- Show the full session path in the sidebar footer when it fits and hide routed-model metadata when it matches the selected model.
 - Preserved the full working-directory path in the footer when it fits, prioritizing it over optional branch metadata.
 - Display OmniRoute's privacy-safe routed connection label in the status row when returned, while retaining the Git email in the location row.
 

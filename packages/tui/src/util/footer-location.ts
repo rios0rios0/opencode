@@ -1,4 +1,3 @@
-import { truncateFilePath } from "../ui/file-path"
 import { stringWidth } from "./string-width"
 
 export type LocationLabelLayout = {
@@ -14,7 +13,7 @@ export type LocationLabelLayout = {
 /**
  * One-row layout for the location label, matching the Powerlevel10k reference:
  * preserve the full directory before showing optional branch metadata, and
- * preserve its root and final component when terminal width requires truncation.
+ * keep the full directory visible, omitting optional branch metadata when it does not fit.
  */
 export function locationLabelLayout(input: {
   directory: string
@@ -29,9 +28,8 @@ export function locationLabelLayout(input: {
     .join(" ")
   const suffix = input.branch ? ` ⎇ ${input.branch}${metadata ? ` ${metadata}` : ""}` : ""
   const showBranch = input.branch !== undefined && stringWidth(input.directory) + stringWidth(suffix) <= input.width
-  const directory = truncateFilePath(input.directory, input.width)
   return {
-    ...splitAnchor(directory),
+    ...splitAnchor(input.directory),
     branch: showBranch ? input.branch : undefined,
     metadata: showBranch && metadata ? metadata : undefined,
   }

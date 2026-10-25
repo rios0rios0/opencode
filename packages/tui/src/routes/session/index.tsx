@@ -2039,7 +2039,10 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
   const routed = createMemo(() => {
     const native = props.message.native
     const textNative = [...props.message.content].reverse().find((part) => part.type === "text")?.native
-    return routedInfo(native) ?? routedInfo(textNative)
+    const value = routedInfo(native) ?? routedInfo(textNative)
+    if (!value) return
+    if (value.provider === props.message.model.providerID && value.model === props.message.model.id) return
+    return value
   })
   const duration = createMemo(() =>
     turnDuration(props.message, messages(), ctx.messageIndex(props.message.id), ctx.legacyTurns()),
