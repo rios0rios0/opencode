@@ -476,7 +476,8 @@ function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Con
     if (window.unlimited !== true) return []
     return [segment(`quota:${index}`, priority, [{ text: `${label} unlimited`, fg: theme.text.muted }])]
   }
-  const color = quotaSeverityColor(theme, 100 - used)
+  const remaining = window.remainingPercentage ?? 100 - used
+  const color = quotaSeverityColor(theme, remaining)
   const fg = window.status === "stale" ? theme.decrease(color) : color
   const reset = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
   const tail = Number.isNaN(reset)
