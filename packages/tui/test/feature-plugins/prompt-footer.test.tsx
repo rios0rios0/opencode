@@ -409,7 +409,7 @@ test("prompt footer drops the previous model's quota as soon as the selection ch
 test("OmniRoute quota segments use Powerlevel10k capacity colors and dim stale readings", () => {
   const dimmed = RGBA.fromInts(80, 80, 80)
   const feedback = (color: RGBA) => ({ base: color, muted: color })
-  const success = ansiToRgba(70)
+  const success = ansiToRgba(76)
   const warning = ansiToRgba(178)
   const error = ansiToRgba(160)
   const theme = {

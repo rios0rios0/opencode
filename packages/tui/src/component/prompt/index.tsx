@@ -15,7 +15,6 @@ import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { ansiToRgba, tint } from "../../theme/color"
-import { FOOTER_STATUS_SEPARATOR } from "../../mini/footer.width"
 import { createAnimatable, tween } from "../../ui/animation"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -1944,7 +1943,7 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="column">
           <Slot path="prompt.footer" input={footerInput()}>
-            <box width="100%" flexDirection="row" gap={2}>
+            <box width="100%" flexDirection="row" gap={0}>
               <Slot path="prompt.footer.status" input={footerInput()}>
                 <box
                   flexGrow={0}
@@ -2018,7 +2017,7 @@ export function Prompt(props: PromptProps) {
                                   <Show when={location().metadata}>
                                     {(metadata) => (
                                       <span style={{ fg: theme.text.faint }}>
-                                        {FOOTER_STATUS_SEPARATOR}
+                                        {"›"}
                                         {metadata()}
                                       </span>
                                     )}

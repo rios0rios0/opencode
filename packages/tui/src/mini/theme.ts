@@ -177,7 +177,7 @@ function map(
       gitModified: exact(RGBA.fromIndex(178, ansiToRgba(178))),
       gitUntracked: exact(RGBA.fromIndex(39, ansiToRgba(39))),
       gitConflicted: exact(RGBA.fromIndex(196, ansiToRgba(196))),
-      contextHealthy: exact(RGBA.fromIndex(70, ansiToRgba(70))),
+      contextHealthy: exact(RGBA.fromIndex(76, ansiToRgba(76))),
       contextWarning: exact(RGBA.fromIndex(178, ansiToRgba(178))),
       contextCritical: exact(RGBA.fromIndex(160, ansiToRgba(160))),
     },
