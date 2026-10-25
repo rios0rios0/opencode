@@ -14,7 +14,7 @@ import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, S
 import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
-import { tint } from "../../theme/color"
+import { ansiToRgba, tint } from "../../theme/color"
 import { createAnimatable, tween } from "../../ui/animation"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -1684,13 +1684,13 @@ export function Prompt(props: PromptProps) {
   const branchColor = createMemo(() => {
     switch (gitBranchColor(git())) {
       case "modified":
-        return theme.text.feedback.warning.base
+        return ansiToRgba(178)
       case "untracked":
-        return theme.text.feedback.info.base
+        return ansiToRgba(39)
       case "conflicted":
-        return theme.text.feedback.error.base
+        return ansiToRgba(196)
       default:
-        return theme.text.muted
+        return ansiToRgba(8)
     }
   })
   const locationActions = useWorkingDirectoryActions({
@@ -2003,16 +2003,16 @@ export function Prompt(props: PromptProps) {
                             onMouseOut={locationActions.onMouseOut}
                             onMouseUp={locationActions.onMouseUp}
                           >
-                            <span style={{ fg: locationActions.hovered() ? theme.text.base : theme.text.muted }}>
+                            <span style={{ fg: locationActions.hovered() ? theme.text.base : ansiToRgba(9) }}>
                               {location().prefix}
                             </span>
-                            <b style={{ fg: locationActions.hovered() ? theme.text.base : theme.hue.accent[500] }}>
+                            <b style={{ fg: locationActions.hovered() ? theme.text.base : ansiToRgba(21) }}>
                               {location().anchor}
                             </b>
                             <Show when={location().branch}>
                               {(branch) => (
                                 <>
-                                  <span style={{ fg: theme.text.base }}>{" ⎇ "}</span>
+                                  <span style={{ fg: ansiToRgba(9) }}>{" ⎇ "}</span>
                                   <span style={{ fg: branchColor() }}>{branch()}</span>
                                   <Show when={location().metadata}>
                                     {(metadata) => <span style={{ fg: theme.text.faint }}> {metadata()}</span>}

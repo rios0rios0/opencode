@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { ansiToRgba } from "../src/theme/color"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { directory, json } from "./fixture/tui-client"
@@ -68,4 +69,18 @@ test("sidebar footer shows the active session's location and branch over the glo
   expect(text).toContain("alpha")
   expect(text).toContain("feature/session")
   expect(text).not.toContain("context-branch")
+})
+
+test("standard prompt location uses the Powerlevel10k directory and Git colors", async () => {
+  await using setup = await createAppFixture({ width: 160, config: { animations: false, tabs: { mode: "off" } } })
+  await setup.ready
+  const location = setup.renderer.root.findDescendantById("prompt.footer.location")
+  if (!location) throw new Error("prompt location footer was not rendered")
+  const spans = setup.captureSpans().lines[location.y]?.spans ?? []
+  const directory = spans.find((span) => span.text.includes("/"))
+  const anchor = spans.find((span) => span.text === "tui")
+  const gitIcon = spans.find((span) => span.text.includes("⎇"))
+  expect(directory?.fg.toInts()).toEqual(ansiToRgba(9).toInts())
+  expect(anchor?.fg.toInts()).toEqual(ansiToRgba(21).toInts())
+  expect(gitIcon?.fg.toInts()).toEqual(ansiToRgba(9).toInts())
 })
