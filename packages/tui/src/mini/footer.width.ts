@@ -21,7 +21,7 @@ export type FooterStatuslineGroup = {
     | "cost"
     | "provider"
     | "menu"
-  parts: Array<{ text: string; tone: "text" | "muted" | "agent" | "status" }>
+  parts: Array<{ text: string; tone: "text" | "muted" | "agent" | "status" | "success" | "warning" | "error" }>
 }
 
 export function footerStatuslinePolicy(input: {
@@ -32,7 +32,7 @@ export function footerStatuslinePolicy(input: {
   work: Array<FooterAction & { id: "queued" | "subagents" | "background" }>
   model?: { name: string; variant?: string }
   agent?: string
-  context?: { compact: string; full: string }
+  context?: { compact: string; full: string; tone?: "success" | "warning" | "error" }
   cost?: string
   provider?: string
   menu?: FooterAction
@@ -100,9 +100,9 @@ export function footerStatuslinePolicy(input: {
     ...input.work.map((item) => action(item.id, item)),
     ...(input.model ? [identity(8)] : []),
     ...(input.agent ? [group("agent", input.agent, "agent")] : []),
-    ...(input.context ? [group("context", input.context.compact)] : []),
+    ...(input.context ? [group("context", input.context.compact, input.context.tone ?? "muted")] : []),
     ...(input.model ? [identity(24)] : []),
-    ...(input.context ? [group("context", input.context.full)] : []),
+    ...(input.context ? [group("context", input.context.full, input.context.tone ?? "muted")] : []),
     ...(input.cost ? [group("cost", input.cost)] : []),
     ...(input.provider ? [group("provider", input.provider)] : []),
     ...(input.menu ? [action("menu", input.menu)] : []),

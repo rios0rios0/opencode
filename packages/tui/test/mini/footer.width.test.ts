@@ -100,6 +100,12 @@ describe("run footer width", () => {
     expect(footerStatuslinePolicy({ ...input, width: 18 }).text).toBe("14.1K (1%) \u00b7 $0.04")
   })
 
+  test("context tone is retained for quota-severity styling", () => {
+    const input = { work: [], context: { compact: "15% ctx", full: "15% used", tone: "error" as const } }
+    const section = footerStatuslinePolicy({ ...input, width: 100 }).groups.find((group) => group.id === "context")
+    expect(section?.parts[0]?.tone).toBe("error")
+  })
+
   test("stop-label enhancement cannot remove identity at the former 56-column breakpoint", () => {
     const input = { ...screenshot, status: { text: "esc stop", expanded: "esc interrupt" } }
     for (const width of [55, 56, 57, 79, 80, 81]) {

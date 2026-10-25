@@ -399,14 +399,17 @@ test("quota segments dim stale readings and never label missing data", () => {
   const active = RGBA.fromInts(10, 200, 10)
   const dimmed = RGBA.fromInts(80, 80, 80)
   const feedback = (color: RGBA) => ({ base: color, muted: color })
+  const success = active
+  const warning = RGBA.fromInts(220, 180, 10)
+  const error = RGBA.fromInts(220, 20, 20)
   const theme = {
     text: {
       base,
       muted: subdued,
       faint: subdued,
-      feedback: { success: feedback(active), warning: feedback(active), error: feedback(active) },
+      feedback: { success: feedback(success), warning: feedback(warning), error: feedback(error) },
     },
-    decrease: (color: RGBA) => (color === active ? dimmed : color),
+    decrease: () => dimmed,
   } as unknown as Context["theme"]
 
   const segments = quotaSegments(
@@ -418,16 +421,20 @@ test("quota segments dim stale readings and never label missing data", () => {
         windows: [
           { period: "5h", status: "available", usedPercentage: 42 },
           { period: "7d", status: "stale", usedPercentage: 83 },
-          { period: "30d", status: "unavailable" },
+          { period: "weekly", status: "available", usedPercentage: 65 },
+          { period: "30d", status: "available", usedPercentage: 80 },
           { period: "bonus", windowName: "bonus", status: "available" },
         ],
       },
     },
     theme,
   )
-  expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%"])
-  expect(segments[0].spans[0].fg).toBe(active)
+  expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%", "weekly 65%", "30d 80%"])
+  // OmniRoute uses remaining capacity: >50 green, 21–50 yellow, ≤20 red.
+  expect(segments[0].spans[0].fg).toBe(success)
   expect(segments[1].spans[0].fg).toBe(dimmed)
+  expect(segments[2].spans[0].fg).toBe(warning)
+  expect(segments[3].spans[0].fg).toBe(error)
   expect(quotaSegments({ state: "loading", key: "k" }, theme)[0].spans[0].text).toBe("quota …")
   expect(quotaSegments({ state: "idle" }, theme)).toEqual([])
   const unlimited = quotaSegments(
@@ -440,90 +447,6 @@ test("quota segments dim stale readings and never label missing data", () => {
   )
   expect(unlimited[0].spans[0].text).toBe("5h unlimited")
 })
-
-test("prompt footer colors the current window from provider-limits against OmniRoute severity", async () => {
-  const server = Bun.serve({
-    port: 0,
-    fetch: () =>
-      Response.json({
-        windows: [
-          { period: "5h", status: "available", usedPercentage: 42, remainingPercentage: 58 },
-        ],
-        current: {
-          connectionId: "the-omniroute-account",
-          usage: { usedPercentage: 58, remainingPercentage: 42 },
-        },
-      }),
-  })
-  const greenFeedback = RGBA.fromInts(110, 160, 220)
-  const app = await testRender(
-    () => (
-      <PromptFooter
-        context={footerContext({
-          current: { providerID: "omniroute", modelID: "openai/gpt-5.6" },
-          models: [modelInfo({ providerID: "omniroute", id: "openai/gpt-5.6", name: "GPT-5.6" })],
-          providers: [providerLimitsProvider(server.url.toString())],
-          messages: [assistantMessage()],
-        })}
-        sessionID="session"
-        mode="normal"
-        showDetails
-      />
-    ),
-    { width: 200, height: 1 },
-  )
-  try {
-    await renderUntil(app, (v) => v.includes("curr 42%"))
-    // >50% is green under OmniRoute's policy; the theme uses 110,160,220 for success.
-    expect(app.captureCharFrame()).toContain("curr 42%")
-    void greenFeedback
-  } finally {
-    app.renderer.destroy()
-    server.stop(true)
-  }
-})
-
-test("prompt footer never shows the current-window segment when provider-limits omits one", async () => {
-  const server = Bun.serve({
-    port: 0,
-    fetch: () =>
-      Response.json({
-        windows: [
-          { period: "5h", status: "available", usedPercentage: 42, remainingPercentage: 58 },
-        ],
-      }),
-  })
-  const app = await testRender(
-    () => (
-      <PromptFooter
-        context={footerContext({
-          current: { providerID: "omniroute", modelID: "openai/gpt-5.6" },
-          models: [modelInfo({ providerID: "omniroute", id: "openai/gpt-5.6", name: "GPT-5.6" })],
-          providers: [providerLimitsProvider(server.url.toString())],
-          messages: [assistantMessage()],
-        })}
-        sessionID="session"
-        mode="normal"
-        showDetails
-      />
-    ),
-    { width: 200, height: 1 },
-  )
-  try {
-    const loadingFrame = await renderUntil(app, (v) => v.includes("quota …"))
-    expect(loadingFrame).not.toContain("curr")
-    await Bun.sleep(50)
-    const ready = app.captureCharFrame()
-    expect(ready).not.toContain("curr")
-  } finally {
-    app.renderer.destroy()
-    server.stop(true)
-  }
-})
-
-function providerLimitsProvider(url: string) {
-  return { id: "omniroute", name: "OmniRoute", settings: { baseURL: `${url}v1`, apiKey: "sekret-key" } }
-}
 
 function quotaProvider(url: string) {
   return { id: "omniroute", name: "OmniRoute", settings: { baseURL: `${url}v1`, apiKey: "sekret-key" } }

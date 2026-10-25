@@ -9,8 +9,6 @@ import {
   MODEL_QUOTA_REFRESH,
   quotaWindows,
   readModelQuota,
-  readProviderLimits,
-  currentQuotaRemainingPercent,
   windowPercent,
   type ModelQuota,
   type ModelQuotaWindow,
@@ -28,14 +26,13 @@ const money = new Intl.NumberFormat("en-US", {
 const SEPARATOR = " · "
 const SEPARATOR_WIDTH = stringWidth(SEPARATOR)
 
-/** OmniRoute quota-severity thresholds: remaining >50 green, 21-50 yellow, ≤20 red, NaN red. */
+/** OmniRoute quota-severity thresholds: >50% remaining is healthy; ≤20% remaining is critical. */
 const QUOTA_STATUS_HEALTHY_ABOVE = 50
 const QUOTA_STATUS_CRITICAL_AT_OR_BELOW = 20
 
-function quotaSeverityColor(theme: Plugin.Context["theme"], percent?: number): RGBA {
-  if (percent === undefined || !Number.isFinite(percent)) return theme.text.feedback.error.base
-  if (percent <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return theme.text.feedback.error.base
-  if (percent <= QUOTA_STATUS_HEALTHY_ABOVE) return theme.text.feedback.warning.base
+function quotaSeverityColor(theme: Plugin.Context["theme"], remaining: number): RGBA {
+  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return theme.text.feedback.error.base
+  if (remaining <= QUOTA_STATUS_HEALTHY_ABOVE) return theme.text.feedback.warning.base
   return theme.text.feedback.success.base
 }
 
@@ -173,11 +170,7 @@ export function PromptFooter(props: {
     // changes, so they are never briefly shown as the new model's quota.
     setQuota({ state: "loading", key: target.key })
     const controller = new AbortController()
-    void Promise.all([readModelQuota(target, controller.signal), readProviderLimits(target)])
-      .then(([quotaResult, currentResult]) =>
-        applyQuota(target.key, quotaResult),
-      )
-      .catch(() => undefined)
+    void readModelQuota(target, controller.signal).then((result) => applyQuota(target.key, result))
     onCleanup(() => controller.abort())
   })
 
@@ -185,9 +178,7 @@ export function PromptFooter(props: {
     const timer = setInterval(() => {
       const target = quotaTarget()
       if (!target) return
-      void Promise.all([readModelQuota(target), readProviderLimits(target)]).then(([quotaResult, currentResult]) =>
-        applyQuota(target.key, quotaResult),
-      )
+      void readModelQuota(target).then((result) => applyQuota(target.key, result))
     }, MODEL_QUOTA_REFRESH)
     onCleanup(() => clearInterval(timer))
   })
@@ -226,7 +217,7 @@ export function PromptFooter(props: {
         const spans: FooterBarSpan[] = [
           {
             text: left === undefined ? `ctx ${Locale.number(usage.tokens)}` : `ctx ${left}% left`,
-            fg: usage.percent === undefined ? theme.text.base : quotaSeverityColor(theme, usage.percent),
+            fg: usage.percent === undefined ? theme.text.base : quotaSeverityColor(theme, 100 - usage.percent),
           },
         ]
         if (usage.limit) {
@@ -474,50 +465,33 @@ const QUOTA_CANONICAL_PERIOD = /^(5h|7d|30d)$/
 export function quotaSegments(quota: ModelQuotaState, theme: Plugin.Context["theme"]): FooterBarSegment[] {
   if (quota.state === "loading") return [segment("quota:loading", 86, [{ text: "quota …", fg: theme.text.faint }])]
   if (quota.state !== "ready" || !quota.quota) return []
-  const segments = [] as FooterBarSegment[]
-  // Current window if available (omniroute provider-limits)
-  const currentPercent = currentQuotaRemainingPercent(quota.quota)
-  if (currentPercent !== undefined) {
-    segments.push(
-      segment(
-        "quota:current",
-        90,
-        [
-          {
-            text: `curr ${Math.round(currentPercent)}%`,
-            fg: quotaSeverityColor(theme, currentPercent),
-          },
-        ],
-        [],
-      ),
-    )
-  }
-  // Periodic windows (5h, 7d, 30d)
-  return segments.concat(
-    quotaWindows(quota.quota).flatMap((window, index) => quotaSegment(window, index, theme)),
-  )
+  return quotaWindows(quota.quota).flatMap((window, index) => quotaSegment(window, index, theme))
 }
 
 function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Context["theme"]): FooterBarSegment[] {
   const priority = 85 - Math.min(index, 30)
   const label = QUOTA_CANONICAL_PERIOD.test(window.period) ? window.period : (window.displayName ?? window.period)
-  const percent = windowPercent(window)
-  if (percent === undefined) {
+  const used = windowPercent(window)
+  if (used === undefined) {
     if (window.unlimited !== true) return []
     return [segment(`quota:${index}`, priority, [{ text: `${label} unlimited`, fg: theme.text.muted }])]
   }
-  const fg = window.status === "stale" ? theme.decrease(quotaSeverityColor(theme, percent)) : quotaSeverityColor(theme, percent)
+  const color = quotaSeverityColor(theme, 100 - used)
+  const fg = window.status === "stale" ? theme.decrease(color) : color
   const reset = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
   const tail = Number.isNaN(reset)
     ? []
     : [{ text: ` (${resetLabel(reset / 1000, window.period !== "5h")})`, fg: theme.text.faint }]
-  return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(percent)}%`, fg }], tail)]
+  return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(used)}%`, fg }], tail)]
 }
 
 function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
   const list: FooterBarSegment[] = []
   const stale = Math.floor(Date.now() / 1000) - plan.fetched >= PLAN_USAGE_STALE
-  const color = (percent: number) => (stale ? theme.decrease(quotaSeverityColor(theme, percent)) : quotaSeverityColor(theme, percent))
+  const color = (used: number) => {
+    const severity = quotaSeverityColor(theme, 100 - used)
+    return stale ? theme.decrease(severity) : severity
+  }
   const reset = (at: number | undefined, weekday: boolean): FooterBarSpan[] =>
     at ? [{ text: ` (${resetLabel(at, weekday)})`, fg: theme.text.faint }] : []
   if (plan.five) {

@@ -44,6 +44,12 @@ export type RunFooterTheme = {
   pane: ColorInput
   border: ColorInput
   line: ColorInput
+  location: ColorInput
+  locationAnchor: ColorInput
+  gitClean: ColorInput
+  gitModified: ColorInput
+  gitUntracked: ColorInput
+  gitConflicted: ColorInput
 }
 
 export type RunBlockTheme = {
@@ -162,6 +168,12 @@ function map(
       pane: exact(theme.background.raised.high),
       border: exact(theme.border.base),
       line: exact(theme.background.raised.high),
+      location: exact(RGBA.fromIndex(9, ansiToRgba(9))),
+      locationAnchor: exact(RGBA.fromIndex(21, ansiToRgba(21))),
+      gitClean: exact(RGBA.fromIndex(8, ansiToRgba(8))),
+      gitModified: exact(RGBA.fromIndex(178, ansiToRgba(178))),
+      gitUntracked: exact(RGBA.fromIndex(39, ansiToRgba(39))),
+      gitConflicted: exact(RGBA.fromIndex(196, ansiToRgba(196))),
     },
     entry: {
       system: { body: scrollback(theme.text.muted) },
@@ -232,6 +244,12 @@ function monoTheme(mode: "dark" | "light"): RunTheme {
       pane: background,
       border: foreground,
       line: background,
+      location: foreground,
+      locationAnchor: foreground,
+      gitClean: foreground,
+      gitModified: foreground,
+      gitUntracked: foreground,
+      gitConflicted: foreground,
     },
     entry: {
       system: { body: foreground },
