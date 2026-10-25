@@ -190,3 +190,24 @@ test("responses without OmniRoute headers show only the selected model", async (
   await fixture.waitForFrame((frame) => frame.includes("plain answer"))
   expect(fixture.captureCharFrame()).not.toContain("routed:")
 })
+
+test("status bar hides routed metadata when it matches the selected model", async () => {
+  await using state = await tmpdir()
+  const sessionID = `ses_${crypto.randomUUID()}`
+  await using fixture = await routedFixture({
+    state: state.path,
+    sessionID,
+    messages: [
+      assistant({
+        sessionID,
+        id: "msg_same",
+        created: 1,
+        text: "same model answer",
+        native: { routed: { model: "first", provider: "demo" } },
+      }),
+    ],
+  })
+  await fixture.waitForFrame((frame) => frame.includes("same model answer"))
+
+  expect(fixture.captureCharFrame()).not.toContain("routed:")
+})

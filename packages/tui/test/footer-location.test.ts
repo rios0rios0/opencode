@@ -32,22 +32,22 @@ test("locationLabelLayout preserves the full directory and drops branch metadata
   })
 })
 
-test("a narrow width truncates the directory and drops the branch", () => {
+test("a narrow width preserves the directory and drops the branch", () => {
   const layout = locationLabelLayout({ directory: "/home/user/dev/opencode", branch: "feature/sidebar", width: 20 })
   expect(layout?.branch).toBeUndefined()
   expect(layout?.metadata).toBeUndefined()
-  expect(layout?.prefix).toBe("/…/user/dev/")
+  expect(layout?.prefix).toBe("/home/user/dev/")
   expect(layout?.anchor).toBe("opencode")
 })
 
-test("the repository root and final directory survive truncation", () => {
+test("the full directory is preserved", () => {
   const layout = locationLabelLayout({
     directory: "/home/user/dev/opencode/packages/tui",
     width: 14,
   })
   expect(layout).not.toBeUndefined()
   expect(layout!.anchor).toBe("tui")
-  expect(`${layout!.prefix}${layout!.anchor}`).toBe("/…/packag…/tui")
+  expect(`${layout!.prefix}${layout!.anchor}`).toBe("/home/user/dev/opencode/packages/tui")
 })
 
 test("a non-Git directory shows only its path", () => {
