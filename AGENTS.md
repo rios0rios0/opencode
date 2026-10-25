@@ -17,6 +17,11 @@
 - Expose the meaningful state dimensions through story keybindings and list them in `StoryFooter`; include a reset command when combinations can leave the fixture in a confusing state.
 - Run a specific story with `OPENCODE_STORY=<story-id> bun run dev:live` from the development worktree, and exercise narrow and wide terminal sizes when layout is relevant.
 
+## TUI Footer Changes
+
+- Treat the standard TUI prompt footer and `opencode mini` footer as a paired surface whenever a request says “footer” or “minibar.” The standard footer is implemented in `packages/tui/src/component/prompt/index.tsx` and its prompt plugins (including `packages/tui/src/feature-plugins/prompt/footer.tsx`); mini is implemented in `packages/tui/src/mini/footer.view.tsx`, `footer.width.ts`, and `theme.ts`.
+- Before considering a footer change complete, check both surfaces, implement the requested behavior in both unless the user explicitly scopes it to one, and add/adjust tests that render/assert both. Similar naming or shared colors do not mean the two implementations share code or behavior.
+
 ## TUI Theme Tokens
 
 - Choose theme tokens by semantic role, not by their current color. Do not use raw `theme.hue` values or borrow an unrelated semantic token to achieve a preferred appearance.

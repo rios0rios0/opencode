@@ -4,6 +4,8 @@
 
 **Area:** TUI footer / status bar
 
+> **Implementation note:** “Footer” requests cover both the standard TUI prompt footer and `opencode mini`. They are separate implementations, so inspect, update, and test both surfaces for each applicable footer change unless the user explicitly asks for only one.
+
 ## Problem
 
 The OCode footer does not match the user's reference layout from Claude Code and Powerlevel10k. Location and Git branch are missing, incorrect, or difficult to read, while status information is compressed into an unsuitable layout and the colors do not match the provided reference. The user wants the status area to use two deliberate rows rather than squeezing all segments into a single bar or showing an incorrect working path.
@@ -26,6 +28,7 @@ The current code has related logic in:
 - Prompt status segments and fitting: `packages/tui/src/feature-plugins/prompt/footer.tsx`
 - Sidebar path/branch footer: `packages/tui/src/feature-plugins/sidebar/footer.tsx`
 - Mini footer/status row sizing: `packages/tui/src/mini/footer.view.tsx` and `packages/tui/src/mini/footer.width.ts`
+- Standard prompt footer/location row: `packages/tui/src/component/prompt/index.tsx` and `packages/tui/src/feature-plugins/prompt/footer.tsx`
 - Existing path formatting: `context.ui.format.path(...)`
 
 In particular, audit the location used by the sidebar footer: its displayed path/branch should follow the active session's location when that differs from the global context location.
