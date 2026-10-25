@@ -31,7 +31,7 @@ import { promptAppend } from "./prompt.shared"
 import { RunPermissionBody } from "./footer.permission"
 import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
-import { footerStatuslinePolicy } from "./footer.width"
+import { FOOTER_STATUS_SEPARATOR, footerStatuslinePolicy } from "./footer.width"
 import { locationLabelLayout } from "../util/footer-location"
 import { gitBranchColor, readGitWorkingTree, type GitWorkingTree } from "../util/git-status"
 import { Keymap } from "../context/keymap"
@@ -554,7 +554,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const statuslineRows = createMemo(() => {
     const text = statusSections()
       .map((group) => group.parts.map((part) => part.text).join(""))
-      .join(props.mono ? " - " : " \u00b7 ")
+      .join(props.mono ? " - " : FOOTER_STATUS_SEPARATOR)
     if (stringWidth(text) <= statusWidth() && !text.includes("\n")) return 1
     // Measure outside the clipped footer so wrapped required controls can grow it.
     const buffer = TextBuffer.create(renderer.widthMethod, renderer.nativeScene)
@@ -1070,7 +1070,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                         {(section, index) => (
                           <>
                             <Show when={index() > 0}>
-                              <span style={{ fg: theme().muted }}>{props.mono ? " - " : " · "}</span>
+                              <span style={{ fg: theme().muted }}>{props.mono ? " - " : FOOTER_STATUS_SEPARATOR}</span>
                             </Show>
                             <For each={section.parts}>
                               {(part) => <span style={{ fg: statusColors()[part.tone] }}>{part.text}</span>}

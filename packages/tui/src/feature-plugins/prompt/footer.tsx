@@ -25,7 +25,7 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
-const SEPARATOR = " · "
+const SEPARATOR = " \u203a "
 const SEPARATOR_WIDTH = stringWidth(SEPARATOR)
 
 /** OmniRoute quota-severity thresholds: >50% remaining is healthy; ≤20% remaining is critical. */
@@ -287,7 +287,7 @@ export function PromptFooter(props: {
   const textSpans = createMemo(() => {
     const spans: FooterBarSpan[] = []
     for (const item of textSegments()) {
-      if (spans.length) spans.push({ text: SEPARATOR, fg: props.context.theme.text.faint })
+      if (spans.length) spans.push({ text: SEPARATOR, fg: props.context.theme.text.muted })
       spans.push(...item.spans)
       if (visible().get(item.id) === "full" && item.tail) spans.push(...item.tail)
     }
@@ -325,7 +325,9 @@ export function PromptFooter(props: {
                 onMouseOut={() => setLiveHovered(false)}
                 onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
               >
-                <Show when={textSpans().length > 0}>{SEPARATOR}</Show>
+                <Show when={textSpans().length > 0}>
+                  <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR}</span>
+                </Show>
                 <Show when={shortcut("session.child.first")}>
                   {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
                 </Show>
@@ -411,8 +413,9 @@ function GitEmail(props: { context: Plugin.Context; sessionID?: string }) {
   return (
     <Show when={email()}>
       {(value) => (
-        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
-          {value()}
+      <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
+        <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR}</span>
+        {value()}
         </text>
       )}
     </Show>

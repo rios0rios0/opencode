@@ -557,7 +557,7 @@ test("direct footer leads with the active agent and default model", async () => 
         .split("\n")
         .find((line) => line.includes("Default model"))
         ?.trimEnd(),
-    ).toBe("Build · Default model · ctrl+p menu")
+    ).toBe("Build › Default model › ctrl+p menu")
     expect(frame).not.toContain("BUILD")
   } finally {
     app.cleanup()
@@ -573,7 +573,7 @@ test("direct footer describes commands and context and shows the model provider"
   try {
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("┃ Ask anything, / for commands, @ for context…")
-    expect(app.captureCharFrame()).toContain("Build · GPT-5 · opencode · ctrl+p menu")
+    expect(app.captureCharFrame()).toContain("Build › GPT-5 › opencode › ctrl+p menu")
   } finally {
     app.cleanup()
   }
@@ -592,7 +592,7 @@ test.each([56, 160])("exit confirmation replaces routine footer details at %i co
   try {
     await app.renderOnce()
     const initial = app.captureCharFrame()
-    expect(initial).toContain("Build · GPT-5 [high] · 12.0K (10%)")
+    expect(initial).toContain("Build › GPT-5 [high] › 12.0K (10%)")
     expect(initial.includes("ctrl+p menu")).toBe(width === 160)
     app.setState((state) => ({ ...state, exit: 1 }))
     await app.renderOnce()
@@ -1760,8 +1760,8 @@ test("direct footer counts queued and steering work while running", async () => 
     const frame = app.captureCharFrame()
     const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
     const statusline = footerStatusline(app.renderer.root)
-    expect(frame).toContain("esc stop · ctrl+x q 2 pending · ↓ 1 subagent · ctrl+b background · Build")
-    expect(frame).toMatch(/opencode · ctrl\+p menu *$/m)
+    expect(frame).toContain("esc stop › ctrl+x q 2 pending › ↓ 1 subagent › ctrl+b background › Build")
+    expect(frame).toMatch(/opencode › ctrl\+p menu *$/m)
     expect(frame).not.toContain("1 agent")
     expect(statusline.backgroundColor.toInts()).toEqual(transparent)
   } finally {
@@ -1774,9 +1774,9 @@ test("direct footer admits the model and variant together before the agent and t
     { width: 12, text: "" },
     { width: 13, text: "GPT-5 [xhigh]" },
     { width: 19, text: "GPT-5 [xhigh]" },
-    { width: 20, text: "Plan · GPT-5 [xhigh]" },
-    { width: 33, text: "Plan · GPT-5 [xhigh]" },
-    { width: 34, text: "Plan · GPT-5 [xhigh] · ctrl+p menu" },
+    { width: 20, text: "Plan › GPT-5 [xhigh]" },
+    { width: 33, text: "Plan › GPT-5 [xhigh]" },
+    { width: 34, text: "Plan › GPT-5 [xhigh] › ctrl+p menu" },
   ]) {
     const app = await renderFooter({
       currentAgent: "Plan",
@@ -1840,12 +1840,12 @@ test.each([16, 20, 24, 32])("status takeovers retain complete instructions at %i
 })
 
 test.each([
-  { field: "agent", text: "esc stop · GPT-5 [high]" },
+  { field: "agent", text: "esc stop › GPT-5 [high]" },
   {
     field: "model",
-    text: "esc stop · Build · long-model-long-model-lo… [high] · opencode · ctrl+p menu",
+    text: "esc stop › Build › long-model-long-model-lo… [high] › opencode › ctrl+p menu",
   },
-  { field: "provider", text: "esc stop · Build · GPT-5 [high]" },
+  { field: "provider", text: "esc stop › Build › GPT-5 [high]" },
 ])("running footer abbreviates only the model and stops at an oversized $field", async ({ field, text }) => {
   const long = `long-${field}-`.repeat(20)
   const app = await renderFooter({
@@ -2008,8 +2008,8 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
     const frame = app.captureCharFrame()
     expect(frame).toContain(
       queued === "none"
-        ? "ctrl+i interrupt · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu"
-        : "ctrl+i interrupt · ctrl+g 1 pending · ctrl+j 1 subagent · Build · gpt-5 · ctrl+y menu",
+        ? "ctrl+i interrupt › ctrl+j 1 subagent › Build › gpt-5 › ctrl+y menu"
+        : "ctrl+i interrupt › ctrl+g 1 pending › ctrl+j 1 subagent › Build › gpt-5 › ctrl+y menu",
     )
     for (const hidden of ["ctrl+b", "ctrl+x", "ctrl+p", "esc", "↓"]) expect(frame).not.toContain(hidden)
   } finally {
@@ -2028,7 +2028,7 @@ test("identity and context precede the provider and a non-fitting provider block
   try {
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
-    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe("Build · GPT-5 [high] · 12.0K (10%)")
+    expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe("Build › GPT-5 [high] › 12.0K (10%)")
   } finally {
     app.cleanup()
   }
@@ -2055,7 +2055,7 @@ test("direct footer keeps compact work, model detail, and context ahead of cost 
     await app.renderOnce()
     const statusline = footerStatusline(app.renderer.root)
     expect(app.captureCharFrame().split("\n")[statusline.y].trimEnd()).toBe(
-      "\u25aa esc stop · ↓ 1 sub · ctrl+b bg · Plan · a-model-name-long-enough… · 16% ctx",
+      "\u25aa esc stop › ↓ 1 sub › ctrl+b bg › Plan › a-model-name-long-enough… › 16% ctx",
     )
   } finally {
     app.cleanup()
@@ -2185,7 +2185,7 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("↓ 1 subagent · ctrl+b background · Build · gpt-5 · ctrl+p menu")
+    expect(frame).toContain("↓ 1 subagent › ctrl+b background › Build › gpt-5 › ctrl+p menu")
     expect(frame).not.toContain("queued")
   } finally {
     app.cleanup()
@@ -2244,7 +2244,7 @@ test("direct footer shows full usage metadata when room is available", async () 
     await app.renderOnce()
     const frame = app.captureCharFrame()
 
-    expect(frame).toContain("159.6K (16%) · $4.23")
+    expect(frame).toContain("159.6K (16%) › $4.23")
   } finally {
     app.cleanup()
   }

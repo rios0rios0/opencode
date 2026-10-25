@@ -1,6 +1,8 @@
 import { Locale } from "../util/locale"
 import { stringWidth } from "../util/string-width"
 
+export const FOOTER_STATUS_SEPARATOR = " \u203a "
+
 type FooterAction = {
   key: string
   label: string
@@ -78,7 +80,7 @@ export function footerStatuslinePolicy(input: {
       "menu",
     ]
     const groups = order.flatMap((id) => selected.get(id) ?? [])
-    const separator = input.mono ? " - " : " \u00b7 "
+    const separator = input.mono ? " - " : FOOTER_STATUS_SEPARATOR
     return {
       groups,
       text: groups
