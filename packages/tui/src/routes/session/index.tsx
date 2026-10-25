@@ -2041,7 +2041,11 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
     const textNative = [...props.message.content].reverse().find((part) => part.type === "text")?.native
     const value = routedInfo(native) ?? routedInfo(textNative)
     if (!value) return
-    if (value.provider === props.message.model.providerID && value.model === props.message.model.id) return
+    if (
+      value.model === props.message.model.id &&
+      (value.provider === undefined || value.provider === props.message.model.providerID)
+    )
+      return
     return value
   })
   const duration = createMemo(() =>

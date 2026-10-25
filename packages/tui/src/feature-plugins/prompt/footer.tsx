@@ -190,7 +190,10 @@ export function PromptFooter(props: {
     if (model) list.push(segment("model", 95, [{ text: model, fg: theme.text.base }]))
     const routed = lastRouted()
     const selected = activeModel()
-    if (routed && (routed.provider !== selected?.providerID || routed.model !== selected?.id)) {
+    if (
+      routed &&
+      (!selected || routed.model !== selected.id || (routed.provider !== undefined && routed.provider !== selected.providerID))
+    ) {
       list.push(segment("routed", 90, [{ text: `routed: ${routedLabel(routed)}`, fg: theme.text.muted }]))
     }
     if (props.sessionID) {

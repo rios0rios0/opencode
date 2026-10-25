@@ -203,7 +203,7 @@ test("status bar hides routed metadata when it matches the selected model", asyn
         id: "msg_same",
         created: 1,
         text: "same model answer",
-        native: { routed: { model: "first", provider: "demo" } },
+        native: { routed: { model: "first" } },
       }),
     ],
   })
