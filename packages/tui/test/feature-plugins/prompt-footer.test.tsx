@@ -411,7 +411,7 @@ test("OmniRoute quota segments use Powerlevel10k capacity colors and dim stale r
   const feedback = (color: RGBA) => ({ base: color, muted: color })
   const success = ansiToRgba(76)
   const warning = ansiToRgba(178)
-  const error = ansiToRgba(160)
+  const error = ansiToRgba(196)
   const theme = {
     text: {
       base,
