@@ -15,6 +15,7 @@ import path from "path"
 import { useLocal } from "../../context/local"
 import { useTheme, useThemes } from "../../context/theme"
 import { ansiToRgba, tint } from "../../theme/color"
+import { FOOTER_STATUS_SEPARATOR } from "../../mini/footer.width"
 import { createAnimatable, tween } from "../../ui/animation"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -2015,7 +2016,12 @@ export function Prompt(props: PromptProps) {
                                   <span style={{ fg: ansiToRgba(9) }}>{" ⎇ "}</span>
                                   <span style={{ fg: branchColor() }}>{branch()}</span>
                                   <Show when={location().metadata}>
-                                    {(metadata) => <span style={{ fg: theme.text.faint }}> {metadata()}</span>}
+                                    {(metadata) => (
+                                      <span style={{ fg: theme.text.faint }}>
+                                        {FOOTER_STATUS_SEPARATOR}
+                                        {metadata()}
+                                      </span>
+                                    )}
                                   </Show>
                                 </>
                               )}

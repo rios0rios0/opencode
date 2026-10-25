@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
 import { ansiToRgba } from "../src/theme/color"
+import { FOOTER_STATUS_SEPARATOR } from "../src/mini/footer.width"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { directory, json } from "./fixture/tui-client"
@@ -83,4 +84,5 @@ test("standard prompt location uses the Powerlevel10k directory and Git colors",
   expect(directory?.fg.toInts()).toEqual(ansiToRgba(9).toInts())
   expect(anchor?.fg.toInts()).toEqual(ansiToRgba(21).toInts())
   expect(gitIcon?.fg.toInts()).toEqual(ansiToRgba(9).toInts())
+  expect(FOOTER_STATUS_SEPARATOR).toBe(" › ")
 })

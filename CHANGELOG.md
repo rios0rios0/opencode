@@ -13,6 +13,7 @@ Release notes for OpenCode V2, newest first.
 - Display OmniRoute's privacy-safe routed connection label in the status row when returned, while retaining the Git email in the location row.
 - Apply the local Powerlevel10k path-anchor and Git-state palette to the standard TUI prompt location footer, alongside its mini-footer styling.
 - Color context remaining capacity in both standard and mini TUI footers with the local Powerlevel10k green/yellow/red palette, using the 50% and 20% capacity bands. Keep reported OmniRoute quota windows aligned with OmniRoute's dashboard thresholds, and keep local plan usage scoped to its existing thresholds.
+- Replace dot separators between standard and mini footer status items with the Powerlevel10k-inspired chevron, including the branch-to-Git-email boundary.
 
 ### Documentation
 

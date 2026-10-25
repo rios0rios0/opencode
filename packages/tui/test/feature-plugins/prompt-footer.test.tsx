@@ -131,7 +131,7 @@ test("prompt footer draws identity, context, plan limits, cost, and live work", 
     expect(frame).toContain("7d 83%")
     expect(frame).toContain("Fable 43%")
     expect(frame).toContain("$1.00")
-    expect(frame).toContain("ctrl+j 1 subagent · 1 shell")
+    expect(frame).toContain("ctrl+j 1 subagent › 1 shell")
     expect(frame).toContain("ctrl+p commands")
 
     const live = app.renderer.root.findDescendantById("prompt.footer.live") as TextRenderable
@@ -220,7 +220,7 @@ test("prompt footer hides details and keeps live work", async () => {
     const details = app.captureCharFrame()
     expect(details).not.toContain("Test Model")
     expect(details).not.toContain("ctrl+p commands")
-    expect(details).toContain("ctrl+j 1 subagent · 1 shell")
+    expect(details).toContain("ctrl+j 1 subagent › 1 shell")
 
     setSessionID(undefined)
     await app.renderOnce()

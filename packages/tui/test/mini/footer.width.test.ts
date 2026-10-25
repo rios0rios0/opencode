@@ -80,7 +80,7 @@ describe("run footer width", () => {
     ])
     const full = footerStatuslinePolicy({ ...screenshot, width: 112 })
     expect(full.text).toBe(
-      "Build \u00b7 GPT-5.6 Sol (50% Off) [max] \u00b7 14.1K (1%) \u00b7 Anomaly / OpenCode \u00b7 $0.04 \u00b7 ctrl+p menu",
+      "Build › GPT-5.6 Sol (50% Off) [max] › 14.1K (1%) › Anomaly / OpenCode › $0.04 › ctrl+p menu",
     )
   })
 
@@ -97,7 +97,7 @@ describe("run footer width", () => {
     const input = { work: [], context: screenshot.context, cost: screenshot.cost }
     expect(footerStatuslinePolicy({ ...input, width: 6 }).text).toBe("1% ctx")
     expect(footerStatuslinePolicy({ ...input, width: 10 }).text).toBe("14.1K (1%)")
-    expect(footerStatuslinePolicy({ ...input, width: 18 }).text).toBe("14.1K (1%) \u00b7 $0.04")
+    expect(footerStatuslinePolicy({ ...input, width: 18 }).text).toBe("14.1K (1%) › $0.04")
   })
 
   test("context tone is retained for quota-severity styling", () => {
