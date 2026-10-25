@@ -17,6 +17,50 @@ export const MODEL_QUOTA_PROVIDER = "omniroute"
 /** How often the reader re-reads the API; the API itself bounds live upstream refreshes. */
 export const MODEL_QUOTA_REFRESH = 60_000
 
+/** OmniRoute provider-limits endpoint for current window percentage (6). */
+export const PROVIDER_LIMITS_URL = "/api/usage/provider-limits"
+
+/** Converts an agent-host base URL (e.g., http://127.0.0.1:20128/v1) to the provider-limits URL (1). */
+export function providerLimitsUrl(baseURL: string): string {
+  if (!URL.canParse(baseURL)) return ""
+  const url = new URL(baseURL)
+  if (url.protocol !== "http:" && url.protocol !== "https:") return ""
+  return `${url.origin}${PROVIDER_LIMITS_URL}`
+}
+
+/** Reads the current window percentage for a target from provider-limits (omniroute). */
+export async function readProviderLimits(target: ModelQuotaTarget, signal?: AbortSignal): Promise<ModelQuotaCurrent | undefined> {
+  const url = providerLimitsUrl(target.baseURL)
+  if (!url) return
+  const timeout = AbortSignal.timeout(MODEL_QUOTA_TIMEOUT)
+  try {
+    const response = await fetch(url, {
+      headers: target.apiKey ? { authorization: `Bearer ${target.apiKey}` } : undefined,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    })
+    if (!response.ok) return
+    const data = await response.json()
+    if (!isRecord(data)) return
+    // Extract the connection with usable usage information (OmniRoute provider-limits format)
+    const connections = (data.caches as any[]) ?? []
+    for (const conn of connections) {
+      if (!isRecord(conn) || typeof conn.id !== "string") continue
+      const used = conn.usage.usedPercentage
+      const remaining = conn.usage.remainingPercentage
+      if (typeof remaining !== "number" || remaining < 0 || remaining > 100) continue
+      return { connectionId: conn.id, usage: { usedPercentage: used, remainingPercentage: remaining } }
+    }
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Returns the remaining percentage from the current window, if present. */
+export function currentQuotaRemainingPercent(quota: ModelQuota): number | undefined {
+  return quota.current?.usage.remainingPercentage
+}
+
 /** A quota read must never hold the refresh loop open; slow answers resolve as absent. */
 const MODEL_QUOTA_TIMEOUT = 5_000
 
@@ -50,11 +94,24 @@ export type ModelQuotaRoute = {
   windows: ModelQuotaWindow[]
 }
 
+/** The current window of the selected connection/vendor (provider-limits API). */
+export type ModelQuotaCurrent = {
+  /** The connection ID that this usage belongs to */
+  connectionId: string
+  /** Current remaining percentage for the model */
+  usage: {
+    usedPercentage: number
+    remainingPercentage: number
+  }
+}
+
 export type ModelQuota = {
   status: ModelQuotaStatus
   plan?: string
   windows: ModelQuotaWindow[]
   routes?: ModelQuotaRoute[]
+  /** Current usage from provider-limits (omniroute). */
+  current?: ModelQuotaCurrent
   updatedAt?: string
 }
 
@@ -87,8 +144,20 @@ export function parseModelQuota(input: unknown): ModelQuota | undefined {
     plan: text(input.plan),
     windows: parseWindows(input.windows),
     routes: parseRoutes(input.routes),
+    current: input.current ? parseCurrentUsage(input.current) : undefined,
     updatedAt: text(input.updatedAt),
   }
+}
+
+function parseCurrentUsage(input: unknown): ModelQuotaCurrent | undefined {
+  if (!isRecord(input)) return
+  if (typeof input.connectionId !== "string") return
+  if (!isRecord(input.usage)) return
+  const used = number(input.usage.usedPercentage)
+  const remaining = number(input.usage.remainingPercentage)
+  if (used === undefined || remaining === undefined) return
+  if (used < 0 || used > 100 || remaining < 0 || remaining > 100) return
+  return { connectionId: input.connectionId, usage: { usedPercentage: used, remainingPercentage: remaining } }
 }
 
 /**
@@ -233,4 +302,8 @@ function timestamp(value: unknown) {
 
 function clamp(value: number) {
   return Math.min(100, Math.max(0, value))
+}
+
+function number(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }

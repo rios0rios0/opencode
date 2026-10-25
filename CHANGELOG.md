@@ -11,6 +11,7 @@ Release notes for OpenCode V2, newest first.
 - Show the full session path in the sidebar footer when it fits and hide routed-model metadata when it matches the selected model.
 - Preserved the full working-directory path in the footer when it fits, prioritizing it over optional branch metadata.
 - Display OmniRoute's privacy-safe routed connection label in the status row when returned, while retaining the Git email in the location row.
+- Color the prompt footer by Powerlevel 10K semantics: identity/account/model/routed glyphs borrow their `text.<role>` tokens, and the current provider window (`curr %`) shows green above 50%, yellow 21–50%, red at or below 20%, mirroring OmniRoute's dashboard quota severity policy; the previous Claude-Code-style 90/70 thresholds were replaced.
 
 ### Documentation
 
