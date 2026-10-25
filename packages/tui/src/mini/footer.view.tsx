@@ -42,7 +42,6 @@ import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
 import { errorMessage } from "../util/error"
 import { createSingleFlight } from "../util/single-flight"
-
 import type {
   FooterPromptRoute,
   FooterQueuedPrompt,
@@ -64,6 +63,12 @@ import type {
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
+
+function quotaSeverityTone(remaining: number): "success" | "warning" | "error" {
+  if (remaining <= 20) return "error"
+  if (remaining <= 50) return "warning"
+  return "success"
+}
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
@@ -215,6 +220,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   const contextUsage = createMemo(() => {
     const current = usage()
     return current && current.tokens > 0 ? formatContextUsage(current.tokens, current.percent) : ""
+  })
+  const contextTone = createMemo(() => {
+    const percent = usage()?.percent
+    if (percent === undefined) return
+    return quotaSeverityTone(Math.max(0, 100 - percent))
   })
   const cost = createMemo(() => (usage()?.cost ? money.format(usage()!.cost!) : ""))
   const takeover = createMemo(() => exiting() || (busy() && armed()) || !!props.state().notice.trim())
@@ -496,6 +506,7 @@ export function RunFooterView(props: RunFooterViewProps) {
           ? {
               compact: usage()?.percent === undefined ? contextUsage() : `${usage()!.percent}% ctx`,
               full: contextUsage(),
+              tone: contextTone(),
             }
           : undefined,
       cost: footerDetails() ? cost() : undefined,
@@ -510,6 +521,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     muted: theme().muted,
     agent: agentColor(),
     status: statusColor(),
+    success: theme().success,
+    warning: theme().warning,
+    error: theme().error,
   }))
   // The location row mirrors the main footer: directory and branch on their own line above the
   // status line, driven by the same Git probe and Powerlevel10k layout rules.
@@ -533,13 +547,13 @@ export function RunFooterView(props: RunFooterViewProps) {
   const branchColor = createMemo(() => {
     switch (gitBranchColor(git())) {
       case "modified":
-        return theme().warning
+        return theme().gitModified
       case "conflicted":
-        return theme().error
+        return theme().gitConflicted
       case "untracked":
-        return theme().text
+        return theme().gitUntracked
       default:
-        return theme().muted
+        return theme().gitClean
     }
   })
   const statuslineRows = createMemo(() => {
@@ -1017,16 +1031,23 @@ export function RunFooterView(props: RunFooterViewProps) {
                       <Show when={busy()}>
                         <box width={1} flexShrink={0} />
                       </Show>
-                      <text id="mini-location" wrapMode="none" width={statusWidth()} flexShrink={0} fg={theme().muted}>
-                        <span style={{ fg: theme().muted }}>{layout().prefix}</span>
-                        <b style={{ fg: theme().text }}>{layout().anchor}</b>
+                      <text
+                        id="mini-location"
+                        wrapMode="none"
+                        truncate
+                        width={statusWidth()}
+                        flexShrink={0}
+                        fg={theme().location}
+                      >
+                        <span style={{ fg: theme().location }}>{layout().prefix}</span>
+                        <b style={{ fg: theme().locationAnchor }}>{layout().anchor}</b>
                         <Show when={layout().branch}>
                           {(branch) => (
                             <>
-                              <span style={{ fg: theme().text }}>{" ⎇ "}</span>
+                              <span style={{ fg: theme().locationAnchor }}>⎇ </span>
                               <span style={{ fg: branchColor() }}>{branch()}</span>
                               <Show when={layout().metadata}>
-                                {(metadata) => <span style={{ fg: theme().muted }}> {metadata()}</span>}
+                                {(metadata) => <span style={{ fg: theme().location }}> {metadata()}</span>}
                               </Show>
                             </>
                           )}

@@ -26,6 +26,16 @@ const money = new Intl.NumberFormat("en-US", {
 const SEPARATOR = " · "
 const SEPARATOR_WIDTH = stringWidth(SEPARATOR)
 
+/** OmniRoute quota-severity thresholds: >50% remaining is healthy; ≤20% remaining is critical. */
+const QUOTA_STATUS_HEALTHY_ABOVE = 50
+const QUOTA_STATUS_CRITICAL_AT_OR_BELOW = 20
+
+function quotaSeverityColor(theme: Plugin.Context["theme"], remaining: number): RGBA {
+  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return theme.text.feedback.error.base
+  if (remaining <= QUOTA_STATUS_HEALTHY_ABOVE) return theme.text.feedback.warning.base
+  return theme.text.feedback.success.base
+}
+
 /** Cached plan limits older than an hour are drawn dimmed; the status line cache refreshes itself. */
 const PLAN_USAGE_STALE = 3600
 const PLAN_USAGE_REFRESH = 60_000
@@ -207,7 +217,7 @@ export function PromptFooter(props: {
         const spans: FooterBarSpan[] = [
           {
             text: left === undefined ? `ctx ${Locale.number(usage.tokens)}` : `ctx ${left}% left`,
-            fg: usage.percent === undefined ? theme.text.base : severity(theme, usage.percent),
+            fg: usage.percent === undefined ? theme.text.base : quotaSeverityColor(theme, 100 - usage.percent),
           },
         ]
         if (usage.limit) {
@@ -437,13 +447,6 @@ function segment(id: string, priority: number, spans: FooterBarSpan[], tail: Foo
   }
 }
 
-/** Green below 70%, amber to 89%, red from 90%, matching the Claude Code status line. */
-function severity(theme: Plugin.Context["theme"], percent: number) {
-  if (percent >= 90) return theme.text.feedback.error.base
-  if (percent >= 70) return theme.text.feedback.warning.base
-  return theme.text.feedback.success.base
-}
-
 export type ModelQuotaState =
   | { state: "idle" }
   | { state: "loading"; key: string }
@@ -468,23 +471,28 @@ export function quotaSegments(quota: ModelQuotaState, theme: Plugin.Context["the
 function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Context["theme"]): FooterBarSegment[] {
   const priority = 85 - Math.min(index, 30)
   const label = QUOTA_CANONICAL_PERIOD.test(window.period) ? window.period : (window.displayName ?? window.period)
-  const percent = windowPercent(window)
-  if (percent === undefined) {
+  const used = windowPercent(window)
+  if (used === undefined) {
     if (window.unlimited !== true) return []
     return [segment(`quota:${index}`, priority, [{ text: `${label} unlimited`, fg: theme.text.muted }])]
   }
-  const fg = window.status === "stale" ? theme.decrease(severity(theme, percent)) : severity(theme, percent)
+  const remaining = window.remainingPercentage ?? 100 - used
+  const color = quotaSeverityColor(theme, remaining)
+  const fg = window.status === "stale" ? theme.decrease(color) : color
   const reset = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
   const tail = Number.isNaN(reset)
     ? []
     : [{ text: ` (${resetLabel(reset / 1000, window.period !== "5h")})`, fg: theme.text.faint }]
-  return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(percent)}%`, fg }], tail)]
+  return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(used)}%`, fg }], tail)]
 }
 
 function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
   const list: FooterBarSegment[] = []
   const stale = Math.floor(Date.now() / 1000) - plan.fetched >= PLAN_USAGE_STALE
-  const color = (percent: number) => (stale ? theme.decrease(severity(theme, percent)) : severity(theme, percent))
+  const color = (used: number) => {
+    const severity = quotaSeverityColor(theme, 100 - used)
+    return stale ? theme.decrease(severity) : severity
+  }
   const reset = (at: number | undefined, weekday: boolean): FooterBarSpan[] =>
     at ? [{ text: ` (${resetLabel(at, weekday)})`, fg: theme.text.faint }] : []
   if (plan.five) {

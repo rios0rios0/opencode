@@ -399,14 +399,17 @@ test("quota segments dim stale readings and never label missing data", () => {
   const active = RGBA.fromInts(10, 200, 10)
   const dimmed = RGBA.fromInts(80, 80, 80)
   const feedback = (color: RGBA) => ({ base: color, muted: color })
+  const success = active
+  const warning = RGBA.fromInts(220, 180, 10)
+  const error = RGBA.fromInts(220, 20, 20)
   const theme = {
     text: {
       base,
       muted: subdued,
       faint: subdued,
-      feedback: { success: feedback(active), warning: feedback(active), error: feedback(active) },
+      feedback: { success: feedback(success), warning: feedback(warning), error: feedback(error) },
     },
-    decrease: (color: RGBA) => (color === active ? dimmed : color),
+    decrease: () => dimmed,
   } as unknown as Context["theme"]
 
   const segments = quotaSegments(
@@ -418,16 +421,20 @@ test("quota segments dim stale readings and never label missing data", () => {
         windows: [
           { period: "5h", status: "available", usedPercentage: 42 },
           { period: "7d", status: "stale", usedPercentage: 83 },
-          { period: "30d", status: "unavailable" },
+          { period: "weekly", status: "available", usedPercentage: 65 },
+          { period: "30d", status: "available", usedPercentage: 80 },
           { period: "bonus", windowName: "bonus", status: "available" },
         ],
       },
     },
     theme,
   )
-  expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%"])
-  expect(segments[0].spans[0].fg).toBe(active)
+  expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%", "weekly 65%", "30d 80%"])
+  // OmniRoute uses remaining capacity: >50 green, 21–50 yellow, ≤20 red.
+  expect(segments[0].spans[0].fg).toBe(success)
   expect(segments[1].spans[0].fg).toBe(dimmed)
+  expect(segments[2].spans[0].fg).toBe(warning)
+  expect(segments[3].spans[0].fg).toBe(error)
   expect(quotaSegments({ state: "loading", key: "k" }, theme)[0].spans[0].text).toBe("quota …")
   expect(quotaSegments({ state: "idle" }, theme)).toEqual([])
   const unlimited = quotaSegments(

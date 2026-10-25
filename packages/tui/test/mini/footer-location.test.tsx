@@ -1,11 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import path from "node:path"
+import { RGBA, TextRenderable } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { Keymap } from "../../src/context/keymap"
 import { RunFooterView } from "../../src/mini/footer.view"
 import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
+import { ansiToRgba } from "../../src/theme/color"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import type { FooterState, FooterSubagentState, FooterView, MiniSettings, RunPrompt } from "../../src/mini/types"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -119,6 +121,24 @@ test("mini shows the directory and branch on their own row above the status line
     app.mockInput.pressKey("H")
     await app.waitFor(() => app.renderer.currentFocusedEditor?.plainText === "H")
     expect(app.captureCharFrame()).toContain("⎇ main")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("mini location and Git state use the local Powerlevel10k palette", async () => {
+  await using repo = await gitRepo()
+  const app = await renderFooter({ directory: repo.path, width: 100, height: 12 })
+  try {
+    await app.waitForFrame((frame) => frame.includes("⎇ main"))
+    const location = app.renderer.root.findDescendantById("mini-location") as TextRenderable
+    expect(location.fg.toInts()).toEqual((RUN_THEME_FALLBACK.footer.location as RGBA).toInts())
+    expect((RUN_THEME_FALLBACK.footer.location as RGBA).toInts()).toEqual(ansiToRgba(9).toInts())
+    expect((RUN_THEME_FALLBACK.footer.locationAnchor as RGBA).toInts()).toEqual(ansiToRgba(21).toInts())
+    expect((RUN_THEME_FALLBACK.footer.gitClean as RGBA).toInts()).toEqual(ansiToRgba(8).toInts())
+    expect((RUN_THEME_FALLBACK.footer.gitModified as RGBA).toInts()).toEqual(ansiToRgba(178).toInts())
+    expect((RUN_THEME_FALLBACK.footer.gitUntracked as RGBA).toInts()).toEqual(ansiToRgba(39).toInts())
+    expect((RUN_THEME_FALLBACK.footer.gitConflicted as RGBA).toInts()).toEqual(ansiToRgba(196).toInts())
   } finally {
     app.cleanup()
   }
