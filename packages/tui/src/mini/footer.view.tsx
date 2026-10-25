@@ -40,6 +40,7 @@ import { modelInfo } from "./variant.shared"
 import { monoShortcut } from "./mono"
 import { stringWidth } from "../util/string-width"
 import { formatContextUsage } from "../util/session"
+import { contextSeverity } from "../util/context-severity"
 import { errorMessage } from "../util/error"
 import { createSingleFlight } from "../util/single-flight"
 import type {
@@ -63,12 +64,6 @@ import type {
   RunTuiConfig,
 } from "./types"
 import type { RunTheme } from "./theme"
-
-function quotaSeverityTone(remaining: number): "success" | "warning" | "error" {
-  if (remaining <= 20) return "error"
-  if (remaining <= 50) return "warning"
-  return "success"
-}
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })
 
@@ -224,7 +219,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   const contextTone = createMemo(() => {
     const percent = usage()?.percent
     if (percent === undefined) return
-    return quotaSeverityTone(Math.max(0, 100 - percent))
+    return contextSeverity(Math.max(0, 100 - percent))
   })
   const cost = createMemo(() => (usage()?.cost ? money.format(usage()!.cost!) : ""))
   const takeover = createMemo(() => exiting() || (busy() && armed()) || !!props.state().notice.trim())
@@ -521,9 +516,9 @@ export function RunFooterView(props: RunFooterViewProps) {
     muted: theme().muted,
     agent: agentColor(),
     status: statusColor(),
-    success: theme().success,
-    warning: theme().warning,
-    error: theme().error,
+    success: theme().contextHealthy,
+    warning: theme().contextWarning,
+    error: theme().contextCritical,
   }))
   // The location row mirrors the main footer: directory and branch on their own line above the
   // status line, driven by the same Git probe and Powerlevel10k layout rules.

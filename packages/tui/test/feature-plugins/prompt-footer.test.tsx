@@ -9,6 +9,8 @@ import { join } from "node:path"
 import { createSignal } from "solid-js"
 import { footerBarLayout, PromptFooter, quotaSegments } from "../../src/feature-plugins/prompt/footer"
 import { localIdentity, parsePlanUsage } from "../../src/util/plan-usage"
+import { ansiToRgba } from "../../src/theme/color"
+import { contextSeverity } from "../../src/util/context-severity"
 
 const base = RGBA.fromInts(200, 200, 200)
 const subdued = RGBA.fromInts(100, 100, 100)
@@ -79,6 +81,15 @@ test("plan usage reads the status line cache", () => {
   })
   expect(parsePlanUsage("")).toBeUndefined()
   expect(parsePlanUsage("five=20")).toBeUndefined()
+})
+
+test("context remaining severity changes at the Powerlevel10k capacity thresholds", () => {
+  expect(contextSeverity(100)).toBe("success")
+  expect(contextSeverity(51)).toBe("success")
+  expect(contextSeverity(50)).toBe("warning")
+  expect(contextSeverity(21)).toBe("warning")
+  expect(contextSeverity(20)).toBe("error")
+  expect(contextSeverity(0)).toBe("error")
 })
 
 test("prompt footer draws identity, context, plan limits, cost, and live work", async () => {
@@ -395,13 +406,12 @@ test("prompt footer drops the previous model's quota as soon as the selection ch
   }
 })
 
-test("quota segments dim stale readings and never label missing data", () => {
-  const active = RGBA.fromInts(10, 200, 10)
+test("OmniRoute quota segments use Powerlevel10k capacity colors and dim stale readings", () => {
   const dimmed = RGBA.fromInts(80, 80, 80)
   const feedback = (color: RGBA) => ({ base: color, muted: color })
-  const success = active
-  const warning = RGBA.fromInts(220, 180, 10)
-  const error = RGBA.fromInts(220, 20, 20)
+  const success = ansiToRgba(70)
+  const warning = ansiToRgba(178)
+  const error = ansiToRgba(160)
   const theme = {
     text: {
       base,
@@ -431,10 +441,10 @@ test("quota segments dim stale readings and never label missing data", () => {
   )
   expect(segments.map((segment) => segment.spans[0].text)).toEqual(["5h 42%", "7d 83%", "weekly 65%", "30d 80%"])
   // OmniRoute uses remaining capacity: >50 green, 21–50 yellow, ≤20 red.
-  expect(segments[0].spans[0].fg).toBe(success)
+  expect(segments[0].spans[0].fg.toInts()).toEqual(success.toInts())
   expect(segments[1].spans[0].fg).toBe(dimmed)
-  expect(segments[2].spans[0].fg).toBe(warning)
-  expect(segments[3].spans[0].fg).toBe(error)
+  expect(segments[2].spans[0].fg.toInts()).toEqual(warning.toInts())
+  expect(segments[3].spans[0].fg.toInts()).toEqual(error.toInts())
   expect(quotaSegments({ state: "loading", key: "k" }, theme)[0].spans[0].text).toBe("quota …")
   expect(quotaSegments({ state: "idle" }, theme)).toEqual([])
   const unlimited = quotaSegments(

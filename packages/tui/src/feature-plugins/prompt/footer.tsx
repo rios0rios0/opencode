@@ -16,7 +16,9 @@ import {
 import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
 import { routedInfo, routedLabel } from "../../util/omniroute-routed"
 import { contextUsage } from "../../util/session"
+import { contextSeverity } from "../../util/context-severity"
 import { stringWidth } from "../../util/string-width"
+import { ansiToRgba } from "../../theme/color"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -30,10 +32,17 @@ const SEPARATOR_WIDTH = stringWidth(SEPARATOR)
 const QUOTA_STATUS_HEALTHY_ABOVE = 50
 const QUOTA_STATUS_CRITICAL_AT_OR_BELOW = 20
 
-function quotaSeverityColor(theme: Plugin.Context["theme"], remaining: number): RGBA {
-  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return theme.text.feedback.error.base
-  if (remaining <= QUOTA_STATUS_HEALTHY_ABOVE) return theme.text.feedback.warning.base
-  return theme.text.feedback.success.base
+function capacityColor(theme: Plugin.Context["theme"], remaining: number): RGBA {
+  if (remaining <= QUOTA_STATUS_CRITICAL_AT_OR_BELOW) return ansiToRgba(160)
+  if (remaining <= QUOTA_STATUS_HEALTHY_ABOVE) return ansiToRgba(178)
+  return ansiToRgba(70)
+}
+
+function contextColor(remaining: number): RGBA {
+  const severity = contextSeverity(remaining)
+  if (severity === "error") return ansiToRgba(160)
+  if (severity === "warning") return ansiToRgba(178)
+  return ansiToRgba(70)
 }
 
 /** Cached plan limits older than an hour are drawn dimmed; the status line cache refreshes itself. */
@@ -217,7 +226,7 @@ export function PromptFooter(props: {
         const spans: FooterBarSpan[] = [
           {
             text: left === undefined ? `ctx ${Locale.number(usage.tokens)}` : `ctx ${left}% left`,
-            fg: usage.percent === undefined ? theme.text.base : quotaSeverityColor(theme, 100 - usage.percent),
+            fg: usage.percent === undefined ? theme.text.base : contextColor(100 - usage.percent),
           },
         ]
         if (usage.limit) {
@@ -477,7 +486,7 @@ function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Con
     return [segment(`quota:${index}`, priority, [{ text: `${label} unlimited`, fg: theme.text.muted }])]
   }
   const remaining = window.remainingPercentage ?? 100 - used
-  const color = quotaSeverityColor(theme, remaining)
+  const color = capacityColor(theme, remaining)
   const fg = window.status === "stale" ? theme.decrease(color) : color
   const reset = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN
   const tail = Number.isNaN(reset)
@@ -490,7 +499,7 @@ function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
   const list: FooterBarSegment[] = []
   const stale = Math.floor(Date.now() / 1000) - plan.fetched >= PLAN_USAGE_STALE
   const color = (used: number) => {
-    const severity = quotaSeverityColor(theme, 100 - used)
+    const severity = capacityColor(theme, 100 - used)
     return stale ? theme.decrease(severity) : severity
   }
   const reset = (at: number | undefined, weekday: boolean): FooterBarSpan[] =>

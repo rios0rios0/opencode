@@ -6,7 +6,7 @@ import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { Keymap } from "../../src/context/keymap"
 import { RunFooterView } from "../../src/mini/footer.view"
-import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
+import { RUN_THEME_FALLBACK, RUN_THEME_FALLBACK_LIGHT, type RunTheme } from "../../src/mini/theme"
 import { ansiToRgba } from "../../src/theme/color"
 import { resolveMiniSettings } from "../../src/mini/runtime.boot"
 import type { FooterState, FooterSubagentState, FooterView, MiniSettings, RunPrompt } from "../../src/mini/types"
@@ -139,6 +139,12 @@ test("mini location and Git state use the local Powerlevel10k palette", async ()
     expect((RUN_THEME_FALLBACK.footer.gitModified as RGBA).toInts()).toEqual(ansiToRgba(178).toInts())
     expect((RUN_THEME_FALLBACK.footer.gitUntracked as RGBA).toInts()).toEqual(ansiToRgba(39).toInts())
     expect((RUN_THEME_FALLBACK.footer.gitConflicted as RGBA).toInts()).toEqual(ansiToRgba(196).toInts())
+    expect((RUN_THEME_FALLBACK.footer.contextHealthy as RGBA).toInts()).toEqual(ansiToRgba(70).toInts())
+    expect((RUN_THEME_FALLBACK.footer.contextWarning as RGBA).toInts()).toEqual(ansiToRgba(178).toInts())
+    expect((RUN_THEME_FALLBACK.footer.contextCritical as RGBA).toInts()).toEqual(ansiToRgba(160).toInts())
+    expect(RUN_THEME_FALLBACK_LIGHT.footer.contextHealthy).toEqual(RUN_THEME_FALLBACK.footer.contextHealthy)
+    expect(RUN_THEME_FALLBACK_LIGHT.footer.contextWarning).toEqual(RUN_THEME_FALLBACK.footer.contextWarning)
+    expect(RUN_THEME_FALLBACK_LIGHT.footer.contextCritical).toEqual(RUN_THEME_FALLBACK.footer.contextCritical)
   } finally {
     app.cleanup()
   }
