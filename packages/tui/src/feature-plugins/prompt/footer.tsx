@@ -14,7 +14,7 @@ import {
   type ModelQuotaWindow,
 } from "../../util/model-quota"
 import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
-import { routedInfo, routedLabel } from "../../util/omniroute-routed"
+import { routedAccountLabel, routedInfo, routedLabel } from "../../util/omniroute-routed"
 import { contextUsage } from "../../util/session"
 import { contextSeverity } from "../../util/context-severity"
 import { stringWidth } from "../../util/string-width"
@@ -139,7 +139,12 @@ export function PromptFooter(props: {
       .findLast((message) => message.type === "assistant")
     return routedInfo(last?.native)
   })
-  const accountLabel = createMemo(() => lastRouted()?.connection)
+  // The label can carry a masked email (length-preserving asterisks); the status bar keeps
+  // it to a minimal budget so the other segments stay visible. Message details show it in full.
+  const accountLabel = createMemo(() => {
+    const routed = lastRouted()
+    return routed ? routedAccountLabel(routed) : undefined
+  })
 
   /**
    * Where the selected model's quota can be read: only a selection served by

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 import { directory, json } from "./fixture/tui-client"
-import { routedDetails, routedInfo, routedLabel } from "../src/util/omniroute-routed"
+import { routedAccountLabel, routedDetails, routedInfo, routedLabel } from "../src/util/omniroute-routed"
 
 test("routedInfo reads only the fields the gateway reported", () => {
   expect(routedInfo(undefined)).toBeUndefined()
@@ -43,6 +43,7 @@ test("routedLabel and routedDetails stay factual", () => {
     routed: {
       model: "z-ai/glm-5.3",
       provider: "nvidia",
+      connection: "NVIDIA NIM (ca.**********************)",
       decision: "strategy=cost-saver; provider=nvidia; latency_ms=812",
       cost: "0.0042100000",
       cacheHit: true,
@@ -54,6 +55,7 @@ test("routedLabel and routedDetails stay factual", () => {
   expect(routedLabel(routed)).toBe("nvidia/z-ai/glm-5.3")
   expect(routedDetails(routed)).toEqual([
     "strategy=cost-saver; provider=nvidia; latency_ms=812",
+    "NVIDIA NIM (ca.**********************)",
     "cost 0.0042100000",
     "cache hit (saved 0.0001)",
     "request req_abc",
@@ -65,6 +67,17 @@ test("routedInfo omits empty or malformed connection labels", () => {
   expect(routedInfo({ routed: { connection: "  " } })).toBeUndefined()
   expect(routedInfo({ routed: { connection: 17 } })).toBeUndefined()
   expect(routedInfo({ routed: { connection: "  Codex Work  " } })?.connection).toBe("Codex Work")
+})
+
+test("routedAccountLabel keeps the status bar segment minimal", () => {
+  const masked = routedInfo({
+    routed: { provider: "nvidia", model: "z-ai/glm-5.3", connection: "NVIDIA NIM (rio********************)" },
+  })!
+  // The masked email preserves length, so the raw label is far longer than the budget;
+  // the bar shows a truncated prefix and the details keep the full label.
+  expect(routedAccountLabel(masked)).toBe("NVIDIA NIM (rio…")
+  expect(routedAccountLabel(routedInfo({ routed: { connection: "OpenAI Personal" } })!)).toBe("OpenAI Personal")
+  expect(routedAccountLabel(routedInfo({ routed: { provider: "nvidia" } })!)).toBe("")
 })
 
 const location = { directory, project: { id: "project", directory, canonical: directory } }

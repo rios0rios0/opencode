@@ -1,3 +1,5 @@
+import { Locale } from "./locale"
+
 export type RoutedInfo = {
   model?: string
   provider?: string
@@ -56,10 +58,23 @@ export function routedLabel(routed: RoutedInfo) {
   return [routed.provider, routed.model].filter((value): value is string => Boolean(value)).join("/")
 }
 
+/**
+ * Character budget for the account label in the status bar. The label can carry a masked
+ * email (asterisks preserve length), so the raw value easily dwarfs every other segment;
+ * the full label stays available in the message details.
+ */
+const ACCOUNT_LABEL_MAX = 16
+
+/** The connection label as the status bar shows it: short enough to leave room for the rest. */
+export function routedAccountLabel(routed: RoutedInfo) {
+  return Locale.truncate(routed.connection ?? "", ACCOUNT_LABEL_MAX)
+}
+
 /** Factual telemetry lines for the message details; only what the gateway reported appears. */
 export function routedDetails(routed: RoutedInfo) {
   const details: string[] = []
   if (routed.decision) details.push(routed.decision)
+  if (routed.connection) details.push(routed.connection)
   const tokens = [
     routed.tokensIn !== undefined ? `in ${routed.tokensIn}` : "",
     routed.tokensOut !== undefined ? `out ${routed.tokensOut}` : "",
