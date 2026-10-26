@@ -99,9 +99,9 @@ test("prompt footer draws identity, context, plan limits, cost, and live work", 
     () => (
       <PromptFooter
         context={footerContext({
-          current: { providerID: "provider", modelID: "model" },
-          models: [modelInfo()],
-          messages: [assistantMessage()],
+          current: { providerID: "anthropic", modelID: "model" },
+          models: [modelInfo({ providerID: "anthropic" })],
+          messages: [assistantMessage("anthropic")],
           cost: 1,
           family: ["session", "child"],
           running: ["child"],
@@ -182,6 +182,48 @@ test("prompt footer drops lower-priority segments on narrow terminals", async ()
     expect(frame).not.toContain("Fable 43%")
     expect(frame).not.toContain("$1.00")
     expect(frame).not.toContain("subagent")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("prompt footer draws plan windows for any provider but Fable only for anthropic", async () => {
+  await writePlanUsage({ five: 20, seven: 83, scoped: { Fable: 43 } })
+  const [providerID, setProviderID] = createSignal("openai")
+  const app = await testRender(
+    () => (
+      <PromptFooter
+        context={footerContext({
+          current: () => ({ providerID: providerID(), modelID: "model" }),
+          models: [modelInfo({ providerID: "openai" }), modelInfo({ providerID: "anthropic" })],
+          messages: [assistantMessage()],
+        })}
+        sessionID="session"
+        mode="normal"
+        showDetails
+      />
+    ),
+    { width: 220, height: 2 },
+  )
+
+  try {
+    // The 5h/7d windows describe any plan, so they stay on screen under another provider…
+    const windows = await renderUntil(app, (value) => value.includes("5h 20%"))
+    expect(windows).toContain("7d 83%")
+    // …but the Fable limit is the Anthropic account's, so it never claims another provider's.
+    expect(windows).not.toContain("Fable 43%")
+
+    setProviderID("anthropic")
+    const fable = await renderUntil(app, (value) => value.includes("Fable 43%"))
+    expect(fable).toContain("5h 20%")
+    expect(fable).toContain("7d 83%")
+
+    setProviderID("openai")
+    await renderUntil(app, (value) => !value.includes("Fable 43%"))
+    const back = await app.captureCharFrame()
+    expect(back).toContain("5h 20%")
+    expect(back).toContain("7d 83%")
+    expect(back).not.toContain("Fable 43%")
   } finally {
     app.renderer.destroy()
   }
@@ -535,11 +577,11 @@ async function writePlanUsage(input: { five: number; seven: number; scoped?: Rec
   )
 }
 
-function assistantMessage() {
+function assistantMessage(providerID = "provider") {
   return {
     id: "message",
     type: "assistant",
-    model: { providerID: "provider", id: "model" },
+    model: { providerID, id: "model" },
     tokens: { input: 1_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   }
 }
