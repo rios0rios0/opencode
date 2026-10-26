@@ -153,18 +153,31 @@ export function PromptFooter(props: {
    * The connection-name side effect keeps the label stable across responses that share the
    * same connection identity.
    */
+  // OmniRoute attaches the routed result to events; depending on the response shape it can
+  // land on the assistant message or on one of its content parts (e.g. reasoning). Read from
+  // both so the account label survives regardless of where the gateway metadata was persisted.
+  const messageRouted = (message: any) => {
+    const fromAssistant = routedInfo(message?.native)
+    if (fromAssistant) return fromAssistant
+    for (const part of message?.content ?? []) {
+      const fromPart = routedInfo(part?.native)
+      if (fromPart) return fromPart
+    }
+    return undefined
+  }
+
   const lastRouted = createMemo(() => {
     if (!props.sessionID) return
     const messages = props.context.data.session.message.list(props.sessionID)
     const last = messages.findLast((message) => message.type === "assistant")
-    const routed = routedInfo(last?.native)
+    const routed = messageRouted(last)
     // OmniRoute is only "out of the picture" when nothing in the transcript carries gateway
     // metadata AND the selected provider is not OmniRoute. A response that has not finished
     // streaming yet has no routed metadata on its (still in-progress) assistant message, but
     // an earlier completed response did, so the cached account must survive until the new
     // response actually completes. Clearing on a merely unfinished last message is what made
     // the account label blink show-then-hide on every turn.
-    const anyRouted = messages.some((message) => message.type === "assistant" && routedInfo(message.native) !== undefined)
+    const anyRouted = messages.some((message) => message.type === "assistant" && messageRouted(message) !== undefined)
     const omnirouteSelected = activeModel()?.providerID === MODEL_QUOTA_PROVIDER
     // Clear when OmniRoute is genuinely gone: nothing carries gateway metadata, or the selected
     // provider is no longer OmniRoute and the latest response itself has no routed metadata.
@@ -177,10 +190,15 @@ export function PromptFooter(props: {
     }
     // A routed response without a connection name (cache hit, idempotent replay, unnamed
     // connection) keeps the label: the account did not change, only this response's headers did.
-    const conn = routed?.connection
+    // On a fresh process persistedConnection() starts empty, so also seed it from the most
+    // recent assistant message that actually carries a connection name (handles the case where
+    // the latest response was a cache hit).
+    const withConn = messages.findLast((m) => m.type === "assistant" && messageRouted(m)?.connection !== undefined)
+    const connRouted = withConn ? messageRouted(withConn) : undefined
+    const conn = connRouted?.connection
     if (conn !== undefined && conn !== persistedConnection()) {
       setPersistedConnection(conn)
-      setPersistedAccountLabel(routedAccountLabel(routed!))
+      setPersistedAccountLabel(routedAccountLabel(connRouted!))
     }
     return routed
   })
