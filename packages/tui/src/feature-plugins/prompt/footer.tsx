@@ -14,7 +14,7 @@ import {
   type ModelQuotaWindow,
 } from "../../util/model-quota"
 import { localIdentity, readPlanUsage, type PlanUsage } from "../../util/plan-usage"
-import { routedAccountLabel, routedInfo, routedLabel } from "../../util/omniroute-routed"
+import { routedAccountLabel, routedInfo, routedLabel, routedMatchesModel } from "../../util/omniroute-routed"
 import { contextUsage } from "../../util/session"
 import { contextSeverity } from "../../util/context-severity"
 import { stringWidth } from "../../util/string-width"
@@ -275,10 +275,7 @@ export function PromptFooter(props: {
     const routed = lastRouted()
     const selected = activeModel()
     if (routed) {
-      const routedPath = routed.provider ? `${routed.provider}/${routed.model ?? ""}` : routed.model ?? ""
-      const matchesSelected =
-        (routed.provider === selected?.providerID && routed.model === selected?.id) ||
-        routedPath === selected?.id
+      const matchesSelected = routedMatchesModel(routed, selected)
       if (!matchesSelected) {
         list.push(segment("routed", 90, [{ text: `routed: ${routedLabel(routed)}`, fg: theme.text.muted }]))
       }

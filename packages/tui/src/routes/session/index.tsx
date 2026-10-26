@@ -45,7 +45,7 @@ import type {
 } from "@opencode/client"
 import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
-import { routedInfo, routedLabel } from "../../util/omniroute-routed"
+import { routedInfo, routedLabel, routedMatchesModel } from "../../util/omniroute-routed"
 import { FilePath } from "../../ui/file-path"
 import {
   canonicalToolName,
@@ -2041,7 +2041,7 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
     const textNative = [...props.message.content].reverse().find((part) => part.type === "text")?.native
     const value = routedInfo(native) ?? routedInfo(textNative)
     if (!value) return
-    if (value.provider === props.message.model.providerID && value.model === props.message.model.id) return
+    if (routedMatchesModel(value, props.message.model)) return
     return value
   })
   const duration = createMemo(() =>
