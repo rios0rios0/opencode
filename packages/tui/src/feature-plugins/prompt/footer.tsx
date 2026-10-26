@@ -49,6 +49,14 @@ function contextColor(remaining: number): RGBA {
 const PLAN_USAGE_STALE = 3600
 const PLAN_USAGE_REFRESH = 60_000
 
+/**
+ * The 5h/7d windows are generic, so they are drawn for any selected provider. The scoped Fable
+ * limit, though, comes from the Claude status line cache and therefore describes the Anthropic
+ * account behind this OpenCode login: it is drawn only while that provider is the selected one,
+ * never as a claim about another provider's plan.
+ */
+const PLAN_USAGE_PROVIDER = "anthropic"
+
 type FooterBarSpan = {
   text: string
   fg: RGBA
@@ -273,14 +281,13 @@ export function PromptFooter(props: {
         list.push(segment("ctx", 100, spans))
       }
     }
-    if (activeModel()?.providerID === MODEL_QUOTA_PROVIDER) {
-      // Direct OpenCode/Fable plan limits describe the local account, not the
-      // route the gateway picked, so an OmniRoute model only shows the quota
-      // the gateway reports for that model.
+    if (selected?.providerID === MODEL_QUOTA_PROVIDER) {
+      // The gateway reports the quota of the account serving the selected model; the local
+      // plan snapshot never stands in for it.
       list.push(...quotaSegments(quota(), theme))
     } else {
       const limits = plan()
-      if (limits) list.push(...planSegments(limits, theme))
+      if (limits) list.push(...planSegments(limits, theme, selected?.providerID))
     }
     if (props.sessionID) {
       const cost = props.context.data.session.cost(props.sessionID)
@@ -536,7 +543,7 @@ function quotaSegment(window: ModelQuotaWindow, index: number, theme: Plugin.Con
   return [segment(`quota:${index}`, priority, [{ text: `${label} ${Math.round(used)}%`, fg }], tail)]
 }
 
-function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
+function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"], providerID?: string) {
   const list: FooterBarSegment[] = []
   const stale = Math.floor(Date.now() / 1000) - plan.fetched >= PLAN_USAGE_STALE
   const color = (used: number) => {
@@ -565,7 +572,9 @@ function planSegments(plan: PlanUsage, theme: Plugin.Context["theme"]) {
       ),
     )
   }
+  const fableAllowed = providerID === PLAN_USAGE_PROVIDER
   plan.scoped.forEach((limit, index) => {
+    if (!fableAllowed && limit.name.toLowerCase() === "fable") return
     list.push(segment(`scoped:${index}`, 70, [{ text: `${limit.name} ${limit.percent}%`, fg: color(limit.percent) }]))
   })
   return list
