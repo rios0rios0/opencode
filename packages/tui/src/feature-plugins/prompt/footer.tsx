@@ -131,20 +131,47 @@ export function PromptFooter(props: {
     return model?.name ?? ref.id
   })
 
-  /** The gateway result of the most recent assistant step, shown next to the selected model. */
+  /**
+   * Persisted routed cache so the account label doesn't blink with every response. Inside the
+   * memo we write to the cached signals only when the connection name actually changes; same-name
+   * responses skip the write so the old label stays visible. This fixes the ephemerous header
+   * that came and went with every HTTP round trip.
+   */
+  const [persistedConnection, setPersistedConnection] = createSignal<string>("")
+  const [persistedAccountLabel, setPersistedAccountLabel] = createSignal<string | undefined>(undefined)
+
+  /**
+   * Latest routed info for both the persisted account label and the routed tag comparison.
+   * The connection-name side effect keeps the label stable across responses that share the
+   * same connection identity.
+   */
   const lastRouted = createMemo(() => {
     if (!props.sessionID) return
     const last = props.context.data.session.message
       .list(props.sessionID)
       .findLast((message) => message.type === "assistant")
-    return routedInfo(last?.native)
+    const routed = routedInfo(last?.native)
+    if (routed === undefined) {
+      // No gateway metadata at all: a direct provider (or an empty transcript) means OmniRoute is
+      // out of the picture, so the cached account would be a lie rather than a kept promise.
+      if (persistedConnection() !== "") {
+        setPersistedConnection("")
+        setPersistedAccountLabel(undefined)
+      }
+      return routed
+    }
+    // A routed response without a connection name (cache hit, idempotent replay, unnamed
+    // connection) keeps the label: the account did not change, only this response's headers did.
+    const conn = routed.connection
+    if (conn !== undefined && conn !== persistedConnection()) {
+      setPersistedConnection(conn)
+      setPersistedAccountLabel(routedAccountLabel(routed))
+    }
+    return routed
   })
-  // The label can carry a masked email (length-preserving asterisks); the status bar keeps
-  // it to a minimal budget so the other segments stay visible. Message details show it in full.
-  const accountLabel = createMemo(() => {
-    const routed = lastRouted()
-    return routed ? routedAccountLabel(routed) : undefined
-  })
+
+  /** Reads from the persisted signal so the label survives message updates without flicker. */
+  const accountLabel = createMemo(() => persistedAccountLabel())
 
   /**
    * Where the selected model's quota can be read: only a selection served by
@@ -214,8 +241,14 @@ export function PromptFooter(props: {
     if (model) list.push(segment("model", 95, [{ text: model, fg: theme.text.base }]))
     const routed = lastRouted()
     const selected = activeModel()
-    if (routed && (routed.provider !== selected?.providerID || routed.model !== selected?.id)) {
-      list.push(segment("routed", 90, [{ text: `routed: ${routedLabel(routed)}`, fg: theme.text.muted }]))
+    if (routed) {
+      const routedPath = routed.provider ? `${routed.provider}/${routed.model ?? ""}` : routed.model ?? ""
+      const matchesSelected =
+        (routed.provider === selected?.providerID && routed.model === selected?.id) ||
+        routedPath === selected?.id
+      if (!matchesSelected) {
+        list.push(segment("routed", 90, [{ text: `routed: ${routedLabel(routed)}`, fg: theme.text.muted }]))
+      }
     }
     if (props.sessionID) {
       const session = props.context.data.session.get(props.sessionID)

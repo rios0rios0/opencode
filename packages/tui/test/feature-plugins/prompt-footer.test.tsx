@@ -458,6 +458,52 @@ test("OmniRoute quota segments use Powerlevel10k capacity colors and dim stale r
   expect(unlimited[0].spans[0].text).toBe("5h unlimited")
 })
 
+test("the account label survives responses without a connection header and clears when OmniRoute is gone", async () => {
+  const assistant = (id: string, native?: Record<string, unknown>) => ({
+    id,
+    type: "assistant",
+    model: { providerID: "omniroute", id: "openai/gpt-4" },
+    ...(native === undefined ? {} : { native }),
+  })
+  const [messages, setMessages] = createSignal<unknown[]>([
+    assistant("msg_first", { routed: { provider: "openai", model: "gpt-4", connection: "Work Account" } }),
+  ])
+  const app = await testRender(
+    () => (
+      <PromptFooter
+        context={footerContext({
+          current: { providerID: "omniroute", modelID: "openai/gpt-4" },
+          models: [modelInfo({ providerID: "omniroute", id: "openai/gpt-4", name: "GPT-4" })],
+          messages: () => messages(),
+        })}
+        sessionID="session"
+        mode="normal"
+        showDetails
+      />
+    ),
+    { width: 200, height: 1 },
+  )
+
+  try {
+    expect(await renderUntil(app, (value) => value.includes("Work Account"))).toContain("Work Account")
+
+    // A response that reports the gateway but no connection name (a cache hit, an idempotent
+    // replay, or an unnamed connection) must not blank the label — the account did not change
+    // between the two responses. The new routed model marks that the second response rendered.
+    setMessages([assistant("msg_no_connection", { routed: { provider: "openai", model: "gpt-5.6" } })])
+    const carried = await renderUntil(app, (value) => value.includes("routed: openai/gpt-5.6"))
+    expect(carried).toContain("Work Account")
+    expect(carried).toContain("routed: openai/gpt-5.6")
+
+    // Without any gateway metadata at all the label is stale, so it goes away.
+    setMessages([assistant("msg_direct")])
+    const frame = await renderUntil(app, (value) => !value.includes("Work Account"))
+    expect(frame).not.toContain("Work Account")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function quotaProvider(url: string) {
   return { id: "omniroute", name: "OmniRoute", settings: { baseURL: `${url}v1`, apiKey: "sekret-key" } }
 }
@@ -502,7 +548,7 @@ function footerContext(input: {
   current?: { providerID: string; modelID: string } | (() => { providerID: string; modelID: string } | undefined)
   models?: unknown[]
   providers?: unknown[]
-  messages?: unknown[]
+  messages?: unknown[] | (() => unknown[])
   cost?: number
   family?: string[]
   running?: string[]
@@ -525,7 +571,7 @@ function footerContext(input: {
         status: (id: string) => ((input.running ?? []).includes(id) ? "running" : "idle"),
         get: () => ({ id: "session", location: { directory: workspace } }),
         cost: () => input.cost ?? 0,
-        message: { list: () => input.messages ?? [] },
+        message: { list: () => (typeof input.messages === "function" ? input.messages() : input.messages) ?? [] },
       },
       shell: { list: () => input.shells ?? [] },
       location: {
