@@ -458,8 +458,8 @@ function GitEmail(props: { context: Plugin.Context; sessionID?: string }) {
   return (
     <Show when={email()}>
       {(value) => (
-        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate marginLeft={1}>
-          <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR.trimStart()}</span>
+        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
+          <span style={{ fg: props.context.theme.text.muted }}>{"\u200b \u203a "}</span>
           {value()}
         </text>
       )}
