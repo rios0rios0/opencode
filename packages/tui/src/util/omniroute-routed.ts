@@ -59,6 +59,42 @@ export function routedLabel(routed: RoutedInfo) {
 }
 
 /**
+ * Whether the routed result points at the same model the user selected/requested.
+ *
+ * The gateway reports the served model split into `provider` + `model`, while the
+ * client may store the chosen model either split (`providerID` + `id`) or as a
+ * single combined id (`provider/model`, common for OmniRoute model aliases).
+ * Compare across both representations so the routed tag only appears when the
+ * gateway actually chose a different model.
+ */
+export function routedMatchesModel(
+  routed: RoutedInfo,
+  chosen: { providerID?: string | null; id?: string | null } | null | undefined,
+) {
+  if (!chosen) return false
+  const routedKey = routedLabel(routed)
+  const chosenID = typeof chosen.id === "string" ? chosen.id.trim() : ""
+  const chosenProvider = typeof chosen.providerID === "string" ? chosen.providerID.trim() : ""
+  if (!chosenID && !chosenProvider) return false
+  if (chosenID && routedKey === chosenID) return true
+  if (chosenProvider && chosenID && `${chosenProvider}/${chosenID}` === routedKey) return true
+  if (
+    routed.model !== undefined &&
+    routed.model === chosenID &&
+    (routed.provider === undefined || routed.provider === chosenProvider || !chosenProvider)
+  )
+    return true
+  if (routed.provider !== undefined && routed.provider === chosenProvider && routed.model === chosenID) return true
+  return false
+}
+
+export const routedMatchesSelected = routedMatchesModel
+export const routedSameModel = routedMatchesModel
+export const isRoutedSameModel = routedMatchesModel
+export const sameRoutedModel = routedMatchesModel
+export const routedEqualsModel = routedMatchesModel
+
+/**
  * Character budget for the account label in the status bar. The label can carry a masked
  * email (asterisks preserve length), so the raw value easily dwarfs every other segment;
  * the full label stays available in the message details.
