@@ -1043,11 +1043,11 @@ export function RunFooterView(props: RunFooterViewProps) {
                               <span style={{ fg: branchColor() }}>{branch()}</span>
                               <Show when={layout().metadata}>
                                 {(metadata) => (
-                                   <span style={{ fg: theme().location }}>
-                                     {FOOTER_STATUS_SEPARATOR}
-                                     {metadata()}
-                                   </span>
-                                 )}
+                                  <span style={{ fg: theme().location }}>
+                                    {FOOTER_STATUS_SEPARATOR}
+                                    {metadata()}
+                                  </span>
+                                )}
                               </Show>
                             </>
                           )}
