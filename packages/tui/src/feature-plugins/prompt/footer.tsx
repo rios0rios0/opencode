@@ -155,13 +155,20 @@ export function PromptFooter(props: {
    */
   const lastRouted = createMemo(() => {
     if (!props.sessionID) return
-    const last = props.context.data.session.message
-      .list(props.sessionID)
-      .findLast((message) => message.type === "assistant")
+    const messages = props.context.data.session.message.list(props.sessionID)
+    const last = messages.findLast((message) => message.type === "assistant")
     const routed = routedInfo(last?.native)
-    if (routed === undefined) {
-      // No gateway metadata at all: a direct provider (or an empty transcript) means OmniRoute is
-      // out of the picture, so the cached account would be a lie rather than a kept promise.
+    // OmniRoute is only "out of the picture" when nothing in the transcript carries gateway
+    // metadata AND the selected provider is not OmniRoute. A response that has not finished
+    // streaming yet has no routed metadata on its (still in-progress) assistant message, but
+    // an earlier completed response did, so the cached account must survive until the new
+    // response actually completes. Clearing on a merely unfinished last message is what made
+    // the account label blink show-then-hide on every turn.
+    const anyRouted = messages.some((message) => message.type === "assistant" && routedInfo(message.native) !== undefined)
+    const omnirouteSelected = activeModel()?.providerID === MODEL_QUOTA_PROVIDER
+    // Clear when OmniRoute is genuinely gone: nothing carries gateway metadata, or the selected
+    // provider is no longer OmniRoute and the latest response itself has no routed metadata.
+    if (!anyRouted || (!omnirouteSelected && routed === undefined)) {
       if (persistedConnection() !== "") {
         setPersistedConnection("")
         setPersistedAccountLabel(undefined)
@@ -170,10 +177,10 @@ export function PromptFooter(props: {
     }
     // A routed response without a connection name (cache hit, idempotent replay, unnamed
     // connection) keeps the label: the account did not change, only this response's headers did.
-    const conn = routed.connection
+    const conn = routed?.connection
     if (conn !== undefined && conn !== persistedConnection()) {
       setPersistedConnection(conn)
-      setPersistedAccountLabel(routedAccountLabel(routed))
+      setPersistedAccountLabel(routedAccountLabel(routed!))
     }
     return routed
   })
