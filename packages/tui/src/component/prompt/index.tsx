@@ -1667,7 +1667,9 @@ export function Prompt(props: PromptProps) {
     }, GIT_STATUS_REFRESH)
     onCleanup(() => clearInterval(timer))
   })
-  const [locationWidth, setLocationWidth] = createSignal(dimensions().width)
+  // Measure the whole footer row, not the label box: a box sized by its own content can never
+  // grow to admit the branch, so a branch that arrives after the first layout stays hidden.
+  const [locationRowWidth, setLocationRowWidth] = createSignal(dimensions().width)
   const locationLabelDisplay = createMemo(() => {
     const label = locationLabel()
     if (!label) return
@@ -1677,7 +1679,7 @@ export function Prompt(props: PromptProps) {
       branch: label.branch,
       ahead: tree?.ahead,
       behind: tree?.behind,
-      width: locationWidth(),
+      width: locationRowWidth(),
     })
   })
   // Powerlevel10k VCS states: conflicts outrank edits, which outrank untracked files; clean and
@@ -1944,17 +1946,17 @@ export function Prompt(props: PromptProps) {
         </box>
         <box width="100%" flexDirection="column">
           <Slot path="prompt.footer" input={footerInput()}>
-            <box width="100%" flexDirection="row" gap={0}>
+            <box
+              width="100%"
+              flexDirection="row"
+              gap={0}
+              onSizeChange={function (this: BoxRenderable) {
+                const width = this.width
+                queueMicrotask(() => setLocationRowWidth(width))
+              }}
+            >
               <Slot path="prompt.footer.status" input={footerInput()}>
-                <box
-                  flexGrow={0}
-                  flexShrink={1}
-                  minWidth={0}
-                  onSizeChange={function (this: BoxRenderable) {
-                    const width = this.width
-                    queueMicrotask(() => setLocationWidth(width))
-                  }}
-                >
+                <box flexGrow={0} flexShrink={1} minWidth={0}>
                   <Switch>
                     <Match when={status() === "running"}>
                       <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">

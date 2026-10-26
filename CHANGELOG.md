@@ -15,6 +15,7 @@ Release notes for OpenCode V2, newest first.
 - Color context remaining capacity in both standard and mini TUI footers with the local Powerlevel10k green/yellow/red palette, using the 50% and 20% capacity bands. Keep reported OmniRoute quota windows aligned with OmniRoute's dashboard thresholds, and keep local plan usage scoped to its existing thresholds.
 - Replace dot separators between standard and mini footer status items with the Powerlevel10k-inspired chevron, including the branch-to-Git-email boundary.
 - Space the branch-to-Git-email chevron like the status row, and align healthy/warning/critical context colors to Powerlevel10k's VCS palette (green `76`, yellow `178`, red `196`).
+- Fixed the standard TUI prompt footer branch vanishing when VCS info arrives after the first paint: the branch-fit budget is now measured against the whole footer row instead of the label's own content-sized box.
 
 ### Documentation
 
