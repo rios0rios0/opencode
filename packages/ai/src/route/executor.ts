@@ -1,12 +1,12 @@
 import { Cause, Effect, Layer, Option, Schema, Stream } from "effect"
 import {
-  FetchHttpClient,
   Headers,
   HttpClient,
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/http"
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { headerDetails, responseHttp, Service, type HttpMiddleware, type Interface } from "./executor-service.js"
@@ -251,7 +251,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   }),
 )
 
-export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
+export const fetchLayer = layer.pipe(Layer.provide(NodeHttpClient.layerNodeHttp))
 
 /** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
 export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
