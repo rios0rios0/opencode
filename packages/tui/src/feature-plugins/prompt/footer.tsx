@@ -371,7 +371,7 @@ export function PromptFooter(props: {
                 onMouseUp={() => props.context.keymap.dispatch("session.child.first")}
               >
                 <Show when={textSpans().length > 0}>
-                  <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR}</span>
+                  <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR.trimStart()}</span>
                 </Show>
                 <Show when={shortcut("session.child.first")}>
                   {(value) => <span style={{ fg: props.context.theme.text.base }}>{value()} </span>}
@@ -458,7 +458,7 @@ function GitEmail(props: { context: Plugin.Context; sessionID?: string }) {
   return (
     <Show when={email()}>
       {(value) => (
-        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate>
+        <text id="prompt.footer.git-email" fg={props.context.theme.text.faint} wrapMode="none" truncate marginLeft={1}>
           <span style={{ fg: props.context.theme.text.muted }}>{SEPARATOR}</span>
           {value()}
         </text>
